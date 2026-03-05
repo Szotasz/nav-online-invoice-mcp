@@ -36,23 +36,27 @@ startCommand:
         enum:
           - test
           - production
-        default: test
+        default: production
       NAV_SOFTWARE_ID:
         type: string
         title: Software ID
-        description: Registered software ID at NAV (optional)
+        description: Registered software ID at NAV
+        default: NAVONLINEINVMCP-01
       NAV_SOFTWARE_DEV_NAME:
         type: string
         title: Developer Name
-        description: Software developer name (optional)
+        description: Software developer name
+        default: MCP Developer
       NAV_SOFTWARE_DEV_CONTACT:
         type: string
         title: Developer Contact
-        description: Software developer contact email (optional)
+        description: Software developer contact email
+        default: dev@example.com
       NAV_SOFTWARE_DEV_TAX_NUMBER:
         type: string
         title: Developer Tax Number
-        description: Software developer tax number (optional)
+        description: Software developer tax number
+        default: "00000000"
   commandFunction:
     file: smithery.js
     function: startCommand

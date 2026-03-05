@@ -10,11 +10,11 @@ export const configSchema = z.object({
   NAV_TAX_NUMBER: z.string().describe("8-digit Hungarian tax number (adoszam)"),
   NAV_SIGNATURE_KEY: z.string().describe("NAV API XML signature key"),
   NAV_EXCHANGE_KEY: z.string().describe("NAV API data exchange key"),
-  NAV_ENV: z.enum(["test", "production"]).default("production").describe("NAV environment"),
-  NAV_SOFTWARE_ID: z.string().optional().describe("Registered software ID at NAV"),
-  NAV_SOFTWARE_DEV_NAME: z.string().optional().describe("Software developer name"),
-  NAV_SOFTWARE_DEV_CONTACT: z.string().optional().describe("Software developer contact email"),
-  NAV_SOFTWARE_DEV_TAX_NUMBER: z.string().optional().describe("Software developer tax number"),
+  NAV_ENV: z.enum(["test", "production"]).default("production").describe("NAV environment (test or production)"),
+  NAV_SOFTWARE_ID: z.string().default("NAVONLINEINVMCP-01").describe("Registered software ID at NAV"),
+  NAV_SOFTWARE_DEV_NAME: z.string().default("MCP Developer").describe("Software developer name"),
+  NAV_SOFTWARE_DEV_CONTACT: z.string().default("dev@example.com").describe("Software developer contact email"),
+  NAV_SOFTWARE_DEV_TAX_NUMBER: z.string().default("00000000").describe("Software developer tax number"),
 });
 
 type SmitheryConfig = z.infer<typeof configSchema>;
@@ -72,7 +72,7 @@ function formatResponse(result: { funcCode: string; errorCode?: string; message?
 }
 
 // Smithery calls: default({ config }) — destructured object with config key
-export default function createServer({ config }: { config: z.infer<typeof configSchema> }) {
+export default function createServer({ config }: { config: Partial<SmitheryConfig> }) {
   const server = new McpServer({
     name: "nav-online-invoice",
     version: "1.0.0",
