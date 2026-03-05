@@ -6,14 +6,31 @@ import { z } from "zod";
 import { NavClient } from "./nav-client.js";
 import type { NavConfig } from "./types.js";
 
-function getConfig(): NavConfig {
+interface SmitheryConfig {
+  NAV_LOGIN?: string;
+  NAV_PASSWORD?: string;
+  NAV_TAX_NUMBER?: string;
+  NAV_SIGNATURE_KEY?: string;
+  NAV_EXCHANGE_KEY?: string;
+  NAV_ENV?: string;
+  NAV_SOFTWARE_ID?: string;
+  NAV_SOFTWARE_DEV_NAME?: string;
+  NAV_SOFTWARE_DEV_CONTACT?: string;
+  NAV_SOFTWARE_DEV_TAX_NUMBER?: string;
+}
+
+function getConfig(config?: SmitheryConfig): NavConfig {
+  const get = (key: string): string | undefined =>
+    config?.[key as keyof SmitheryConfig] || process.env[key];
+
   const required = (key: string): string => {
-    const val = process.env[key];
-    if (!val) throw new Error(`Missing required environment variable: ${key}`);
+    const val = get(key);
+    if (!val) throw new Error(`Missing required config: ${key}`);
     return val;
   };
 
-  const isTest = process.env.NAV_ENV === "test";
+  const env = get("NAV_ENV");
+  const isTest = !env || env === "test";
   const baseUrl = isTest
     ? "https://api-test.onlineszamla.nav.gov.hu/invoiceService/v3"
     : "https://api.onlineszamla.nav.gov.hu/invoiceService/v3";
@@ -24,14 +41,14 @@ function getConfig(): NavConfig {
     taxNumber: required("NAV_TAX_NUMBER"),
     signatureKey: required("NAV_SIGNATURE_KEY"),
     exchangeKey: required("NAV_EXCHANGE_KEY"),
-    baseUrl: process.env.NAV_BASE_URL || baseUrl,
-    softwareId: process.env.NAV_SOFTWARE_ID || "NAVONLINEINVMCP-01",
-    softwareName: process.env.NAV_SOFTWARE_NAME || "nav-online-invoice-mcp",
-    softwareVersion: process.env.NAV_SOFTWARE_VERSION || "1.0.0",
-    softwareDevName: process.env.NAV_SOFTWARE_DEV_NAME || "MCP Developer",
-    softwareDevContact: process.env.NAV_SOFTWARE_DEV_CONTACT || "dev@example.com",
-    softwareDevCountryCode: process.env.NAV_SOFTWARE_DEV_COUNTRY || "HU",
-    softwareDevTaxNumber: process.env.NAV_SOFTWARE_DEV_TAX_NUMBER || process.env.NAV_TAX_NUMBER || "00000000",
+    baseUrl: get("NAV_BASE_URL") || baseUrl,
+    softwareId: get("NAV_SOFTWARE_ID") || "NAVONLINEINVMCP-01",
+    softwareName: get("NAV_SOFTWARE_NAME") || "nav-online-invoice-mcp",
+    softwareVersion: get("NAV_SOFTWARE_VERSION") || "1.0.0",
+    softwareDevName: get("NAV_SOFTWARE_DEV_NAME") || "MCP Developer",
+    softwareDevContact: get("NAV_SOFTWARE_DEV_CONTACT") || "dev@example.com",
+    softwareDevCountryCode: get("NAV_SOFTWARE_DEV_COUNTRY") || "HU",
+    softwareDevTaxNumber: get("NAV_SOFTWARE_DEV_TAX_NUMBER") || get("NAV_TAX_NUMBER") || "00000000",
   };
 }
 
@@ -54,7 +71,7 @@ function formatResponse(result: { funcCode: string; errorCode?: string; message?
   return parts.join("\n");
 }
 
-export default function createServer(): McpServer {
+export default function createServer(config?: SmitheryConfig): McpServer {
   const server = new McpServer({
     name: "nav-online-invoice",
     version: "1.0.0",
@@ -69,7 +86,7 @@ export default function createServer(): McpServer {
       taxNumber: z.string().length(8).describe("8-digit Hungarian tax number (adoszam)"),
     },
     async ({ taxNumber }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryTaxpayer(taxNumber);
       return { content: [{ type: "text", text: formatResponse(result, data, rawXml) }] };
     }
@@ -85,7 +102,7 @@ export default function createServer(): McpServer {
       supplierTaxNumber: z.string().optional().describe("Supplier tax number (only for INBOUND)"),
     },
     async ({ invoiceNumber, invoiceDirection, batchIndex, supplierTaxNumber }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryInvoiceData(
         invoiceNumber, invoiceDirection, batchIndex, supplierTaxNumber
       );
@@ -111,7 +128,7 @@ export default function createServer(): McpServer {
       currency: z.string().optional().describe("Currency code (e.g. HUF, EUR)"),
     },
     async (params) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryInvoiceDigest(params);
       return { content: [{ type: "text", text: formatResponse(result, data, rawXml) }] };
     }
@@ -127,7 +144,7 @@ export default function createServer(): McpServer {
       supplierTaxNumber: z.string().optional(),
     },
     async ({ invoiceNumber, invoiceDirection, batchIndex, supplierTaxNumber }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryInvoiceCheck(
         invoiceNumber, invoiceDirection, batchIndex, supplierTaxNumber
       );
@@ -145,7 +162,7 @@ export default function createServer(): McpServer {
       taxNumber: z.string().optional().describe("Partner tax number"),
     },
     async ({ page, invoiceNumber, invoiceDirection, taxNumber }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryInvoiceChainDigest(
         page, invoiceNumber, invoiceDirection, taxNumber
       );
@@ -161,7 +178,7 @@ export default function createServer(): McpServer {
       returnOriginalRequest: z.boolean().default(false).describe("Include original request data"),
     },
     async ({ transactionId, returnOriginalRequest }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryTransactionStatus(
         transactionId, returnOriginalRequest
       );
@@ -179,7 +196,7 @@ export default function createServer(): McpServer {
       requestStatus: z.string().optional().describe("Filter by status"),
     },
     async ({ page, insDateFrom, insDateTo, requestStatus }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml } = await client.queryTransactionList(
         page, insDateFrom, insDateTo, requestStatus
       );
@@ -208,7 +225,7 @@ export default function createServer(): McpServer {
       compressed: z.boolean().default(false).describe("Whether invoiceData is GZIP compressed"),
     },
     async ({ operations, compressed }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
       const response = formatResponse(result, data, rawXml);
       const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
@@ -231,7 +248,7 @@ export default function createServer(): McpServer {
         .max(100),
     },
     async ({ operations }) => {
-      const client = new NavClient(getConfig());
+      const client = new NavClient(getConfig(config));
       const { result, data, rawXml, transactionId } = await client.manageAnnulment(operations);
       const response = formatResponse(result, data, rawXml);
       const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
@@ -243,7 +260,7 @@ export default function createServer(): McpServer {
 }
 
 export function createSandboxServer(): McpServer {
-  return createServer();
+  return createServer({});
 }
 
 // --- Start Server (stdio mode) ---
