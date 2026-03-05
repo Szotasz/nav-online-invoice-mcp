@@ -4,12 +4,12 @@
   "description": "MCP server for Hungarian NAV Online Invoice (Online Szamla) API v3.0",
   "main": "dist/index.js",
   "bin": {
-    "nav-online-invoice-mcp": "dist/index.js"
+    "nav-online-invoice-mcp": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts"
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts"
   },
   "keywords": [
     "nav",
