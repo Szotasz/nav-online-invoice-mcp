@@ -54,7 +54,7 @@ function formatResponse(result: { funcCode: string; errorCode?: string; message?
   return parts.join("\n");
 }
 
-export function createServer(): McpServer {
+export default function createServer(): McpServer {
   const server = new McpServer({
     name: "nav-online-invoice",
     version: "1.0.0",
