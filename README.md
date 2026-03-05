@@ -4,6 +4,16 @@ MCP (Model Context Protocol) szerver a magyar NAV Online Számla API v3.0-hoz.
 
 Ez a szerver lehetővé teszi, hogy AI asszisztensek (pl. Claude) lekérdezzék és kezeljék a számlákat a NAV Online Számla rendszeren keresztül.
 
+## Távoli használat (Smithery)
+
+A legegyszerűbb módja a szerver használatának, ha a Smithery-n keresztül csatlakozol — nem kell semmit telepítened:
+
+[![Smithery Badge](https://smithery.ai/badge/aiamindennapokban/nav-online-invoice-mcp)](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)
+
+**[Csatlakozás a Smithery-n](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)**
+
+A Smithery automatikusan bekéri a NAV hitelesítő adataidat (login, jelszó, adószám, aláíró kulcs, cserekulcs) és kezeli a kapcsolatot.
+
 ## Funkciók
 
 ### Lekérdező eszközök (csak olvasás)
@@ -25,11 +35,15 @@ NAV Online Számla technikai felhasználó szükséges. Regisztráció:
 - **Teszt**: https://onlineszamla-test.nav.gov.hu/
 - **Éles**: https://onlineszamla.nav.gov.hu/
 
-## Telepítés
+## Helyi telepítés
+
+Ha inkább lokálisan szeretnéd futtatni a szervert:
 
 ### 1. Telepítés
 
 ```bash
+git clone https://github.com/Szotasz/nav-online-invoice-mcp.git
+cd nav-online-invoice-mcp
 npm install
 npm run build
 ```
@@ -61,14 +75,14 @@ Add hozzá a `~/.claude/settings.json` fájlhoz:
   "mcpServers": {
     "nav-online-invoice": {
       "command": "node",
-      "args": ["/elérési/út/nav-online-invoice-mcp/dist/index.js"],
+      "args": ["/elérési/út/nav-online-invoice-mcp/dist/cli.js"],
       "env": {
         "NAV_LOGIN": "felhasználónév",
         "NAV_PASSWORD": "jelszó",
         "NAV_TAX_NUMBER": "12345678",
         "NAV_SIGNATURE_KEY": "aláíró_kulcs",
         "NAV_EXCHANGE_KEY": "cserekulcs",
-        "NAV_ENV": "test"
+        "NAV_ENV": "production"
       }
     }
   }
@@ -99,6 +113,12 @@ Minden kérés automatikusan aláírásra kerül SHA-512 (jelszó) és SHA3-512 
 | Teszt | `https://api-test.onlineszamla.nav.gov.hu/invoiceService/v3` |
 | Éles | `https://api.onlineszamla.nav.gov.hu/invoiceService/v3` |
 
+## Támogatás
+
+Ha hasznosnak találod ezt a projektet, támogathatod a fejlesztést:
+
+[![Támogass a Donably-n](https://img.shields.io/badge/T%C3%A1mogat%C3%A1s-Donably-18b8c4)](https://www.donably.com/ai-a-mindennapokban-szabolccsal)
+
 ---
 
 # NAV Online Invoice MCP Server (English)
@@ -106,6 +126,16 @@ Minden kérés automatikusan aláírásra kerül SHA-512 (jelszó) és SHA3-512 
 MCP (Model Context Protocol) server for the Hungarian NAV Online Invoice (Online Számla) API v3.0.
 
 This server allows AI assistants like Claude to query and manage invoices through the NAV Online Invoice system.
+
+## Remote Usage (Smithery)
+
+The easiest way to use this server is through Smithery — no installation needed:
+
+[![Smithery Badge](https://smithery.ai/badge/aiamindennapokban/nav-online-invoice-mcp)](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)
+
+**[Connect on Smithery](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)**
+
+Smithery will automatically prompt you for your NAV credentials (login, password, tax number, signature key, exchange key) and manage the connection.
 
 ## Features
 
@@ -128,11 +158,15 @@ You need a NAV Online Invoice technical user. Register at:
 - **Test**: https://onlineszamla-test.nav.gov.hu/
 - **Production**: https://onlineszamla.nav.gov.hu/
 
-## Setup
+## Local Installation
+
+If you prefer to run the server locally:
 
 ### 1. Install
 
 ```bash
+git clone https://github.com/Szotasz/nav-online-invoice-mcp.git
+cd nav-online-invoice-mcp
 npm install
 npm run build
 ```
@@ -164,14 +198,14 @@ Add to your `~/.claude/settings.json`:
   "mcpServers": {
     "nav-online-invoice": {
       "command": "node",
-      "args": ["/path/to/nav-online-invoice-mcp/dist/index.js"],
+      "args": ["/path/to/nav-online-invoice-mcp/dist/cli.js"],
       "env": {
         "NAV_LOGIN": "your_login",
         "NAV_PASSWORD": "your_password",
         "NAV_TAX_NUMBER": "12345678",
         "NAV_SIGNATURE_KEY": "your_signature_key",
         "NAV_EXCHANGE_KEY": "your_exchange_key",
-        "NAV_ENV": "test"
+        "NAV_ENV": "production"
       }
     }
   }
@@ -201,6 +235,12 @@ All requests are automatically signed using SHA-512 (password) and SHA3-512 (req
 |---|---|
 | Test | `https://api-test.onlineszamla.nav.gov.hu/invoiceService/v3` |
 | Production | `https://api.onlineszamla.nav.gov.hu/invoiceService/v3` |
+
+## Support
+
+If you find this project useful, you can support the development:
+
+[![Support on Donably](https://img.shields.io/badge/Support-Donably-18b8c4)](https://www.donably.com/ai-a-mindennapokban-szabolccsal)
 
 ## License
 
