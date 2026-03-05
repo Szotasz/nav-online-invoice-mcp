@@ -1,6 +1,109 @@
-# NAV Online Invoice MCP Server
+# NAV Online Számla MCP Szerver
 
-MCP (Model Context Protocol) server for the Hungarian NAV Online Invoice (Online Szamla) API v3.0.
+MCP (Model Context Protocol) szerver a magyar NAV Online Számla API v3.0-hoz.
+
+Ez a szerver lehetővé teszi, hogy AI asszisztensek (pl. Claude) lekérdezzék és kezeljék a számlákat a NAV Online Számla rendszeren keresztül.
+
+## Funkciók
+
+### Lekérdező eszközök (csak olvasás)
+- **query_taxpayer** - Adózói adatok lekérdezése adószám alapján
+- **query_invoice_data** - Számla részletes adatainak lekérdezése számlaszám alapján
+- **query_invoice_digest** - Számlák keresése szűrőkkel (dátum, partner, kategória stb.)
+- **query_invoice_check** - Számla létezésének ellenőrzése a rendszerben
+- **query_invoice_chain_digest** - Számla módosítási láncának megtekintése
+- **query_transaction_status** - Beküldött számlák feldolgozási állapotának ellenőrzése
+- **query_transaction_list** - Tranzakciók listázása dátumtartomány alapján
+
+### Írási eszközök
+- **manage_invoice** - Számlák beküldése (CREATE, MODIFY, STORNO)
+- **manage_annulment** - Számlák technikai érvénytelenítése
+
+## Előfeltételek
+
+NAV Online Számla technikai felhasználó szükséges. Regisztráció:
+- **Teszt**: https://onlineszamla-test.nav.gov.hu/
+- **Éles**: https://onlineszamla.nav.gov.hu/
+
+## Telepítés
+
+### 1. Telepítés
+
+```bash
+npm install
+npm run build
+```
+
+### 2. Konfigurálás
+
+Másold az `.env.example` fájlt `.env` néven és töltsd ki az adataidat:
+
+```bash
+cp .env.example .env
+```
+
+Szükséges környezeti változók:
+| Változó | Leírás |
+|---|---|
+| `NAV_LOGIN` | Technikai felhasználó login |
+| `NAV_PASSWORD` | Technikai felhasználó jelszó |
+| `NAV_TAX_NUMBER` | 8 jegyű adószám |
+| `NAV_SIGNATURE_KEY` | Aláíró kulcs a NAV-tól |
+| `NAV_EXCHANGE_KEY` | Cserekulcs a NAV-tól |
+| `NAV_ENV` | `test` vagy `production` |
+
+### 3. Hozzáadás a Claude Code-hoz
+
+Add hozzá a `~/.claude/settings.json` fájlhoz:
+
+```json
+{
+  "mcpServers": {
+    "nav-online-invoice": {
+      "command": "node",
+      "args": ["/elérési/út/nav-online-invoice-mcp/dist/index.js"],
+      "env": {
+        "NAV_LOGIN": "felhasználónév",
+        "NAV_PASSWORD": "jelszó",
+        "NAV_TAX_NUMBER": "12345678",
+        "NAV_SIGNATURE_KEY": "aláíró_kulcs",
+        "NAV_EXCHANGE_KEY": "cserekulcs",
+        "NAV_ENV": "test"
+      }
+    }
+  }
+}
+```
+
+## Használati példák
+
+Konfigurálás után a következőket kérdezheted Claude-tól:
+
+- "Keress rá erre az adószámra: 12345678"
+- "Listázd ki a kiállított számlákat 2024 januárból"
+- "Kérd le az INV-001 számla részleteit"
+- "Mi a feldolgozási állapota ennek a tranzakciónak: TX123"
+
+## API referencia
+
+Ez a szerver a [NAV Online Invoice API v3.0](https://github.com/nav-gov-hu/Online-Invoice) implementációja.
+
+### Hitelesítés
+
+Minden kérés automatikusan aláírásra kerül SHA-512 (jelszó) és SHA3-512 (kérés aláírás) használatával. A token csere az írási műveleteknél automatikusan történik.
+
+### Környezetek
+
+| Környezet | API URL |
+|---|---|
+| Teszt | `https://api-test.onlineszamla.nav.gov.hu/invoiceService/v3` |
+| Éles | `https://api.onlineszamla.nav.gov.hu/invoiceService/v3` |
+
+---
+
+# NAV Online Invoice MCP Server (English)
+
+MCP (Model Context Protocol) server for the Hungarian NAV Online Invoice (Online Számla) API v3.0.
 
 This server allows AI assistants like Claude to query and manage invoices through the NAV Online Invoice system.
 
@@ -79,10 +182,10 @@ Add to your `~/.claude/settings.json`:
 
 Once configured, you can ask Claude:
 
-- "Keress ra erre az adoszamra: 12345678"
-- "Listazd ki a kiallitott szamlakat 2024 januarbol"
-- "Kerd le az INV-001 szamla reszleteit"
-- "Mi a feldolgozasi allapota ennek a tranzakcionak: TX123"
+- "Look up this tax number: 12345678"
+- "List invoices issued in January 2024"
+- "Get the details of invoice INV-001"
+- "What is the processing status of transaction TX123"
 
 ## API Reference
 
