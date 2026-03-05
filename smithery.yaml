@@ -1,0 +1,58 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - NAV_LOGIN
+      - NAV_PASSWORD
+      - NAV_TAX_NUMBER
+      - NAV_SIGNATURE_KEY
+      - NAV_EXCHANGE_KEY
+    properties:
+      NAV_LOGIN:
+        type: string
+        title: NAV Login
+        description: NAV Online Invoice API login username
+      NAV_PASSWORD:
+        type: string
+        title: NAV Password
+        description: NAV Online Invoice API password
+      NAV_TAX_NUMBER:
+        type: string
+        title: Tax Number
+        description: 8-digit Hungarian tax number (adoszam)
+      NAV_SIGNATURE_KEY:
+        type: string
+        title: Signature Key
+        description: NAV API XML signature key
+      NAV_EXCHANGE_KEY:
+        type: string
+        title: Exchange Key
+        description: NAV API data exchange key
+      NAV_ENV:
+        type: string
+        title: Environment
+        description: NAV environment (test or production)
+        enum:
+          - test
+          - production
+        default: test
+      NAV_SOFTWARE_ID:
+        type: string
+        title: Software ID
+        description: Registered software ID at NAV (optional)
+      NAV_SOFTWARE_DEV_NAME:
+        type: string
+        title: Developer Name
+        description: Software developer name (optional)
+      NAV_SOFTWARE_DEV_CONTACT:
+        type: string
+        title: Developer Contact
+        description: Software developer contact email (optional)
+      NAV_SOFTWARE_DEV_TAX_NUMBER:
+        type: string
+        title: Developer Tax Number
+        description: Software developer tax number (optional)
+  commandFunction:
+    file: smithery.js
+    function: startCommand
