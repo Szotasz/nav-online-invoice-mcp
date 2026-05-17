@@ -4,15 +4,11 @@ MCP (Model Context Protocol) szerver a magyar NAV Online Számla API v3.0-hoz.
 
 Ez a szerver lehetővé teszi, hogy AI asszisztensek (pl. Claude) lekérdezzék és kezeljék a számlákat a NAV Online Számla rendszeren keresztül.
 
-## Távoli használat (Smithery)
+## Távoli használat (connectors.hu)
 
-A legegyszerűbb módja a szerver használatának, ha a Smithery-n keresztül csatlakozol — nem kell semmit telepítened:
+Ha nem szeretnéd helyben telepíteni, a [connectors.hu](https://connectors.hu) egységes hozzáférési pontot ad a NAV Online Számlához (és további magyar üzleti API-khoz). A connectors.hu kezeli a hitelesítést, és a `nav_*` namespacelt tool-okat hozzáférhetővé teszi az AI ügynököd számára (Claude Code, Claude Desktop, stb.).
 
-[![Smithery Badge](https://smithery.ai/badge/aiamindennapokban/nav-online-invoice-mcp)](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)
-
-**[Csatlakozás a Smithery-n](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)**
-
-A Smithery automatikusan bekéri a NAV hitelesítő adataidat (login, jelszó, adószám, aláíró kulcs, cserekulcs) és kezeli a kapcsolatot.
+**[Csatlakozás a connectors.hu-n](https://connectors.hu)**
 
 ## Funkciók
 
@@ -127,15 +123,11 @@ MCP (Model Context Protocol) server for the Hungarian NAV Online Invoice (Online
 
 This server allows AI assistants like Claude to query and manage invoices through the NAV Online Invoice system.
 
-## Remote Usage (Smithery)
+## Remote Usage (connectors.hu)
 
-The easiest way to use this server is through Smithery — no installation needed:
+If you don't want to install locally, [connectors.hu](https://connectors.hu) provides a unified access point to NAV Online Számla (and other Hungarian business APIs). connectors.hu handles authentication and exposes `nav_*` namespaced tools to your AI agent (Claude Code, Claude Desktop, etc.).
 
-[![Smithery Badge](https://smithery.ai/badge/aiamindennapokban/nav-online-invoice-mcp)](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)
-
-**[Connect on Smithery](https://smithery.ai/servers/aiamindennapokban/nav-online-invoice-mcp)**
-
-Smithery will automatically prompt you for your NAV credentials (login, password, tax number, signature key, exchange key) and manage the connection.
+**[Connect via connectors.hu](https://connectors.hu)**
 
 ## Features
 
