@@ -27,7 +27,7 @@ export function getConfig(config?: Partial<Record<string, string>>): NavConfig {
     baseUrl: get("NAV_BASE_URL") || baseUrl,
     softwareId: get("NAV_SOFTWARE_ID") || "NAVONLINEINVMCP-01",
     softwareName: get("NAV_SOFTWARE_NAME") || "nav-online-invoice-mcp",
-    softwareVersion: get("NAV_SOFTWARE_VERSION") || "1.0.0",
+    softwareVersion: get("NAV_SOFTWARE_VERSION") || "2.0.0",
     softwareDevName: get("NAV_SOFTWARE_DEV_NAME") || "MCP Developer",
     softwareDevContact: get("NAV_SOFTWARE_DEV_CONTACT") || "dev@example.com",
     softwareDevCountryCode: get("NAV_SOFTWARE_DEV_COUNTRY") || "HU",
