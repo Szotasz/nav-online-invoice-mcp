@@ -135,7 +135,12 @@ export function withConfirmation<A extends Record<string, unknown>>(o: ConfirmOp
       } catch (err) {
         return text(`${NOTHING_SENT}: a megerősítés kérése nem sikerült (${message(err)}).`, true);
       }
-      if (answer.action === "accept" && answer.content?.confirm === true) return o.run(args, ctx);
+      if (answer.action === "accept" && answer.content?.confirm === true) {
+        // The client may have given up the call while the user decided (its request timeout runs from the start of the
+        // call): then nobody would receive the answer, so nothing is sent.
+        if (ctx?.mcpReq.signal.aborted) return text(`${NOTHING_SENT}: a hívást a kliens közben megszakította; kérd újra.`, true);
+        return o.run(args, ctx);
+      }
       return text(
         answer.action === "accept"
           ? `${NOTHING_SENT}: a megerősítés nem volt bepipálva.`

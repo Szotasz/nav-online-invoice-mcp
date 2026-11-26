@@ -1,4 +1,5 @@
 import type { ServerContext } from "@modelcontextprotocol/server";
+import { NOTHING_SENT } from "./confirm.js";
 import { NavClient } from "./nav-client.js";
 import type { NavConfig } from "./types.js";
 
@@ -178,6 +179,14 @@ export async function submitAndWait(
   /** When the tools/call started (deps.now()); the call budget counts from here. */
   startedAt: number = deps.now(),
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
+  // The budget already used up (a slow confirmation) or the call given up: the client is not waiting for an answer any
+  // more, so a transaction ID would reach nobody. Nothing is sent.
+  if (ctx?.mcpReq.signal.aborted || deps.now() - startedAt >= CALL_BUDGET_MS) {
+    return {
+      content: [{ type: "text", text: `${NOTHING_SENT}: a megerősítés túl sokáig tartott, ennek a hívásnak lejárt az ideje; kérd újra.` }],
+      isError: true,
+    };
+  }
   const client = new NavClient(config);
   const { result, data, rawXml, transactionId } = await client.manageInvoice(args.operations, args.compressed);
   if (!transactionId) {

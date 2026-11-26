@@ -8,7 +8,7 @@ import { registerTools, formatResponse } from "../src/tools.js";
 import { ConfirmationStore } from "../src/confirm.js";
 import { CALL_BUDGET_MS, MAX_WAIT_MS, submitAndWait, waitForResult, type WaitDeps } from "../src/wait.js";
 import {
-  FAKE, accept, b64, connectClient, invoiceXml, textOf, tokenExchangeOk, withMockNav, type Elicit, type NavCall, type Reply,
+  FAKE, accept, annulmentXml, b64, connectClient, invoiceXml, textOf, tokenExchangeOk, withMockNav, type Elicit, type NavCall, type Reply,
 } from "./helpers.js";
 
 const TX = "TESZTTX000000001";
@@ -68,7 +68,9 @@ async function session(calls: NavCall[], opts: { elicit?: Elicit; config?: Recor
     const r = await client.callTool({ name: "submit_and_wait", arguments: args }, options);
     return { text: textOf(r), isError: r.isError === true };
   };
-  return { call, asked, sent: () => calls.map((c) => c.endpoint), close: () => client.close() };
+  const callTool = (name: string, args: Record<string, unknown>, signal: AbortSignal) =>
+    client.callTool({ name, arguments: args }, { signal });
+  return { call, callTool, asked, sent: () => calls.map((c) => c.endpoint), close: () => client.close() };
 }
 
 test("DONE after PROCESSING: the user confirmed the summary, the invoice is sent once, and the answer says accepted", async () => {
@@ -155,20 +157,52 @@ test("the wait gets what is left of the 50 s call budget after a slow confirmati
   });
 });
 
-test("no time left after the confirmation: sent, no status query, the transaction ID at once", async () => {
+for (const took of [50_000, 55_000]) {
+  test(`a confirmation that used up the call budget (${took / 1000} s): nothing is sent, ask again`, async () => {
+    await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+      const clock = fakeClock();
+      const s = await session(calls, { clock, elicit: () => { clock.advance(took); return { action: "accept", content: { confirm: true } }; } });
+      const r = await s.call(ARGS());
+      assert.equal(r.isError, true);
+      assert.match(r.text, /^Nem küldtem semmit a NAV-nak \(nothing sent\): .*kérd újra/);
+      assert.deepEqual(s.sent(), [], "the mock NAV log is empty");
+      await s.close();
+    });
+  });
+}
+
+test("budget used up during the submission itself: sent, no status query, the transaction ID at once", async () => {
   await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
-    const clock = fakeClock();
-    const s = await session(calls, { clock, elicit: () => { clock.advance(55_000); return { action: "accept", content: { confirm: true } }; } });
-    const r = await s.call(ARGS());
-    assert.equal(r.isError, false);
-    assert.match(r.text, /^## Sent, processing not finished yet/);
-    assert.ok(r.text.includes(`**Transaction ID**: \`${TX}\``), r.text);
-    assert.match(r.text, /had no time left to wait/);
-    assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"], "sent once, no status query");
-    assert.equal(clock.elapsed(), 55_000);
-    await s.close();
+    // the clock jumps past the budget while the submission runs (after tokenExchange and manageInvoice)
+    const deps: WaitDeps = { now: () => (calls.length >= 2 ? CALL_BUDGET_MS + 1_000 : 0), sleep: async () => {} };
+    const r = await submitAndWait(getConfig(FAKE), { operations: ARGS().operations, compressed: false }, undefined, formatResponse, deps, 0);
+    const text = textOf(r);
+    assert.match(text, /^## Sent, processing not finished yet/);
+    assert.ok(text.includes(`**Transaction ID**: \`${TX}\``), text);
+    assert.match(text, /had no time left to wait/);
+    assert.deepEqual(calls.map((c) => c.endpoint), ["tokenExchange", "manageInvoice"]);
   });
 });
+
+// The client gives up the call while the user decides: it sends notifications/cancelled, then the user's accept
+// arrives. Nothing may be sent, by any of the three write tools.
+for (const [tool, args] of [
+  ["submit_and_wait", ARGS()],
+  ["manage_invoice", ARGS()],
+  ["manage_annulment", { operations: [{ index: 1, annulmentData: b64(annulmentXml()) }] }],
+] as const) {
+  test(`${tool}: a call cancelled during the confirmation sends nothing`, async () => {
+    await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+      const controller = new AbortController();
+      const s = await session(calls, { elicit: () => { controller.abort(); return { action: "accept", content: { confirm: true } }; } });
+      const server = s;
+      await assert.rejects(s.callTool(tool, args, controller.signal));
+      await new Promise((r) => setTimeout(r, 50));
+      assert.deepEqual(server.sent(), [], "the mock NAV log is empty");
+      await s.close();
+    });
+  });
+}
 
 test("maxWaitSeconds still wins when it is shorter than what is left", async () => {
   await withMockNav(replies([status({ index: 1, status: "PROCESSING" })]), async (calls) => {
