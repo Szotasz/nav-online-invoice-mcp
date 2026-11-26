@@ -355,10 +355,10 @@ test("without elicitation: the first call only summarises; the id sends it once"
     const second = await s.call("manage_invoice", { ...args, confirmation_id: id });
     assert.equal(second.isError, false, second.text);
     assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"]);
+    // The same data again: the sent-ledger answers with the transaction ID before the id is even looked at.
     const again = await s.call("manage_invoice", { ...args, confirmation_id: id });
-    assert.equal(again.isError, true);
-    assert.match(again.text, /nothing sent.*ismeretlen vagy már felhasznált/);
-    assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"], "the id is single-use");
+    assert.match(again.text, /nothing sent.*már elküldtem/);
+    assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"], "sent once");
     await s.close();
   });
 });
@@ -375,6 +375,14 @@ test("without elicitation: the id is bound to the arguments and to the tool", as
     assert.deepEqual(s.sent(), []);
     await s.close();
   });
+});
+
+test("the confirmation store: an id is single-use", () => {
+  const store = new ConfirmationStore();
+  const args = { operations: [{ index: 1 }] };
+  const id = store.issue("manage_annulment", args);
+  assert.equal(store.consume(id, "manage_annulment", args), "ok");
+  assert.equal(store.consume(id, "manage_annulment", args), "unknown");
 });
 
 test("the confirmation store: an id is bound to its tool, even with the same arguments", () => {

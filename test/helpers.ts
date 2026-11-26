@@ -87,6 +87,8 @@ export async function connectClient(
     server?: { connect: (t: InMemoryTransport) => Promise<void> };
     /** The elicitation capability the client declares with `elicit`; form mode when not given. */
     elicitation?: Record<string, Record<string, never>>;
+    /** Set when the server cancels an open confirmation request. */
+    elicitCancelled?: { value: boolean };
   } = {},
 ): Promise<Client> {
   const server = opts.server ?? createServer({ config });
@@ -95,7 +97,8 @@ export async function connectClient(
   const client = new Client({ name: "test", version: "0" }, { capabilities: opts.elicit ? { elicitation: opts.elicitation ?? { form: {} } } : {} });
   if (opts.elicit) {
     const elicit = opts.elicit;
-    client.setRequestHandler('elicitation/create', async (req) => {
+    client.setRequestHandler('elicitation/create', async (req, ctx) => {
+      ctx.mcpReq.signal.addEventListener("abort", () => { if (opts.elicitCancelled) opts.elicitCancelled.value = true; });
       const message = (req.params as { message: string }).message;
       opts.asked?.push(message);
       const r = elicit(message);

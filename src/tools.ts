@@ -5,6 +5,7 @@ import type { NavConfig } from "./types.js";
 import { ConfirmationStore, confirmationIdSchema, withConfirmation } from "./confirm.js";
 import { summarizeAnnulmentOperations, summarizeInvoiceOperations } from "./summaries.js";
 import { MAX_WAIT_MS, realDeps, submitAndWait, type WaitDeps } from "./wait.js";
+import { SentLedger } from "./sent.js";
 
 export function formatResponse(result: { funcCode: string; errorCode?: string; message?: string }, data: unknown, rawXml?: string): string {
   const parts: string[] = [];
@@ -41,6 +42,8 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
   const store = options.store ?? new ConfirmationStore();
   const elicitationTimeoutMs = options.elicitationTimeoutMs;
   const waitDeps = options.wait ?? realDeps;
+  // The invoice data already sent, shared by manage_invoice and submit_and_wait (src/sent.ts).
+  const ledger = new SentLedger(waitDeps.now);
 
   // --- Query Tools (read-only, safe) ---
 
@@ -214,17 +217,23 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
       }),
       annotations: { title: "Submit Invoice", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
-    withConfirmation({
-      server, store, elicitationTimeoutMs, tool: "manage_invoice",
-      describe: ({ operations, compressed }) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
-      run: async ({ operations, compressed }) => {
-        const client = new NavClient(getConfig());
-        const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
-        const response = formatResponse(result, data, rawXml);
-        const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
-        return { content: [{ type: "text", text: response + extra }] };
-      },
-    })
+    (args, ctx) => {
+      // The same data already sent: nothing is sent, not even a confirmation is asked (src/sent.ts).
+      const earlier = ledger.find(args.operations, args.compressed);
+      if (earlier) return Promise.resolve(ledger.alreadySent(earlier));
+      return withConfirmation({
+        server, store, elicitationTimeoutMs, tool: "manage_invoice",
+        describe: ({ operations, compressed }: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
+        run: async ({ operations, compressed }: typeof args) => {
+          const client = new NavClient(getConfig());
+          const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
+          if (transactionId) ledger.record(operations, compressed, transactionId);
+          const response = formatResponse(result, data, rawXml);
+          const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
+          return { content: [{ type: "text", text: response + extra }] };
+        },
+      })(args, ctx);
+    }
   );
 
   server.registerTool(
@@ -258,10 +267,12 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
     // The call budget counts from the start of this call, before the confirmation (src/wait.ts, CALL_BUDGET_MS).
     (args, ctx) => {
       const startedAt = waitDeps.now();
+      const earlier = ledger.find(args.operations, args.compressed);
+      if (earlier) return Promise.resolve(ledger.alreadySent(earlier));
       return withConfirmation({
         server, store, elicitationTimeoutMs, tool: "submit_and_wait",
         describe: (a: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, a.operations, a.compressed),
-        run: (a: typeof args, c) => submitAndWait(getConfig(), a, c, formatResponse, waitDeps, startedAt),
+        run: (a: typeof args, c) => submitAndWait(getConfig(), a, c, formatResponse, waitDeps, startedAt, ledger),
       })(args, ctx);
     }
   );

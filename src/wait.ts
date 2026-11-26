@@ -1,6 +1,7 @@
 import type { ServerContext } from "@modelcontextprotocol/server";
 import { NOTHING_SENT } from "./confirm.js";
 import { NavClient } from "./nav-client.js";
+import type { SentLedger } from "./sent.js";
 import type { NavConfig } from "./types.js";
 
 // submit_and_wait: manage_invoice's submission (behind the same confirmation, see src/tools.ts), then a bounded wait
@@ -178,6 +179,8 @@ export async function submitAndWait(
   deps: WaitDeps = realDeps,
   /** When the tools/call started (deps.now()); the call budget counts from here. */
   startedAt: number = deps.now(),
+  /** Where the transaction ID is recorded as soon as NAV gives it, before the wait (src/sent.ts). */
+  ledger?: SentLedger,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   // The budget already used up (a slow confirmation) or the call given up: the client is not waiting for an answer any
   // more, so a transaction ID would reach nobody. Nothing is sent.
@@ -194,6 +197,7 @@ export async function submitAndWait(
     // data in, whatever else the answer says, so then the wait runs and the result per invoice decides.
     return { content: [{ type: "text", text: formatSubmission(result, data, rawXml) }], isError: true };
   }
+  ledger?.record(args.operations, args.compressed, transactionId);
   const left = CALL_BUDGET_MS - (deps.now() - startedAt);
   const maxWaitMs = Math.max(0, Math.min(MAX_WAIT_MS, (args.maxWaitSeconds ?? Infinity) * 1000, left));
   const progressToken = ctx?.mcpReq._meta?.progressToken;

@@ -130,7 +130,8 @@ export function withConfirmation<A extends Record<string, unknown>>(o: ConfirmOp
               required: ["confirm"],
             },
           },
-          o.elicitationTimeoutMs === undefined ? undefined : { timeout: o.elicitationTimeoutMs },
+          // The call's own signal: a client that gives up the call also ends the open confirmation request.
+          { signal: ctx?.mcpReq.signal, ...(o.elicitationTimeoutMs === undefined ? {} : { timeout: o.elicitationTimeoutMs }) },
         );
       } catch (err) {
         return text(`${NOTHING_SENT}: a megerősítés kérése nem sikerült (${message(err)}).`, true);

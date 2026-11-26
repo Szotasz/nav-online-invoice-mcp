@@ -7,6 +7,7 @@ import { getConfig } from "../src/config.js";
 import { registerTools, formatResponse } from "../src/tools.js";
 import { ConfirmationStore } from "../src/confirm.js";
 import { CALL_BUDGET_MS, MAX_WAIT_MS, submitAndWait, waitForResult, type WaitDeps } from "../src/wait.js";
+import { RESEND_GUARD_MS } from "../src/sent.js";
 import {
   FAKE, accept, annulmentXml, b64, connectClient, invoiceXml, textOf, tokenExchangeOk, withMockNav, type Elicit, type NavCall, type Reply,
 } from "./helpers.js";
@@ -58,18 +59,18 @@ function fakeClock(): WaitDeps & { elapsed: () => number; pauses: number[]; adva
 
 const ARGS = (extra: Record<string, unknown> = {}) => ({ operations: [{ index: 1, operation: "CREATE", invoiceData: b64(invoiceXml()) }], ...extra });
 
-async function session(calls: NavCall[], opts: { elicit?: Elicit; config?: Record<string, string>; clock?: WaitDeps } = {}) {
+async function session(calls: NavCall[], opts: { elicit?: Elicit; config?: Record<string, string>; clock?: WaitDeps; elicitCancelled?: { value: boolean } } = {}) {
   const clock = opts.clock ?? fakeClock();
   const server = new McpServer({ name: "nav-test", version: "0" });
   registerTools(server, () => getConfig(opts.config ?? FAKE), { store: new ConfirmationStore(), wait: clock });
   const asked: string[] = [];
-  const client = await connectClient(undefined, { elicit: opts.elicit, asked, server });
+  const client = await connectClient(undefined, { elicit: opts.elicit, asked, server, elicitCancelled: opts.elicitCancelled });
   const call = async (args: Record<string, unknown>, options?: Parameters<typeof client.callTool>[1]) => {
     const r = await client.callTool({ name: "submit_and_wait", arguments: args }, options);
     return { text: textOf(r), isError: r.isError === true };
   };
-  const callTool = (name: string, args: Record<string, unknown>, signal: AbortSignal) =>
-    client.callTool({ name, arguments: args }, { signal });
+  const callTool = (name: string, args: Record<string, unknown>, signal: AbortSignal, onprogress?: () => void) =>
+    client.callTool({ name, arguments: args }, { signal, ...(onprogress ? { onprogress } : {}) });
   return { call, callTool, asked, sent: () => calls.map((c) => c.endpoint), close: () => client.close() };
 }
 
@@ -221,6 +222,84 @@ test("maxWaitSeconds still wins when it is shorter than what is left", async () 
     const s = await session(calls, { clock, elicit: () => { clock.advance(10_000); return { action: "accept", content: { confirm: true } }; } });
     await s.call(ARGS({ maxWaitSeconds: 5 }));
     assert.equal(clock.elapsed(), 15_000);
+    await s.close();
+  });
+});
+
+// --- the same data again (src/sent.ts): a client that gave up never showed the model the transaction ID ---
+
+test("cancelled during the wait, then the same data again: nothing sent, the transaction ID, no confirmation", async () => {
+  await withMockNav(replies([status({ index: 1, status: "PROCESSING" })]), async (calls) => {
+    const s = await session(calls, { elicit: accept });
+    const controller = new AbortController();
+    // the client gives up after the first status query (it never sees the answer with the transaction ID)
+    await assert.rejects(s.callTool("submit_and_wait", ARGS(), controller.signal, () => controller.abort()));
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(s.asked.length, 1);
+    const again = await s.call(ARGS());
+    assert.equal(again.isError, false);
+    assert.match(again.text, /^Nem küldtem semmit a NAV-nak \(nothing sent\): pontosan ezt az adatot \d+ perce már elküldtem/);
+    assert.ok(again.text.includes(`**Transaction ID**: \`${TX}\``), again.text);
+    assert.equal(s.asked.length, 1, "no second confirmation");
+    assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 1, "sent once");
+    await s.close();
+  });
+});
+
+test("manage_invoice and submit_and_wait share the record; other data is sent as usual", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    const s = await session(calls, { elicit: accept });
+    await s.callTool("manage_invoice", ARGS(), new AbortController().signal);
+    const same = await s.call(ARGS());
+    assert.ok(same.text.includes(`**Transaction ID**: \`${TX}\``), same.text);
+    assert.match(same.text, /már elküldtem/);
+    const other = await s.call({ operations: [{ index: 1, operation: "CREATE", invoiceData: b64(invoiceXml({ number: "TESZT-MASIK" })) }] });
+    assert.match(other.text, /^## Processed by NAV/);
+    assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 2);
+    assert.equal(s.asked.length, 2);
+    await s.close();
+  });
+});
+
+test("the record expires after 30 minutes; a submission NAV did not take in is not recorded", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    const clock = fakeClock();
+    const s = await session(calls, { elicit: accept, clock });
+    await s.call(ARGS());
+    clock.advance(RESEND_GUARD_MS + 1);
+    const later = await s.call(ARGS());
+    assert.match(later.text, /^## Processed by NAV/);
+    assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 2);
+    await s.close();
+  });
+  await withMockNav({
+    tokenExchange: tokenExchangeOk(),
+    manageInvoice: { root: "ManageInvoiceResponse", funcCode: "ERROR", errorCode: "INVALID_REQUEST", message: "Teszt" },
+  }, async (calls) => {
+    const s = await session(calls, { elicit: accept });
+    await s.call(ARGS());
+    await s.call(ARGS());
+    assert.equal(s.asked.length, 2, "asked again: nothing was taken in");
+    assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 2);
+    await s.close();
+  });
+});
+
+test("the client gives up while the confirmation is still open: nothing is sent, also if the user accepts later", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    let answer: ((v: { action: "accept"; content: { confirm: boolean } }) => void) | undefined;
+    const cancelled = { value: false };
+    const s = await session(calls, { elicit: () => new Promise((r) => { answer = r; }) as never, elicitCancelled: cancelled });
+    const controller = new AbortController();
+    const pending = s.callTool("manage_invoice", ARGS(), controller.signal);
+    await new Promise((r) => setTimeout(r, 20));
+    controller.abort();
+    await assert.rejects(pending);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(cancelled.value, true, "the open confirmation request is cancelled too");
+    answer?.({ action: "accept", content: { confirm: true } });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.deepEqual(s.sent(), []);
     await s.close();
   });
 });
