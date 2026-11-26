@@ -15,6 +15,8 @@ Sources, all in the NAV's official repository (nav-gov-hu/Online-Invoice):
 
 The client may ask for the status as often as it likes ([SPEC] 1.1). Use `query_transaction_status` with the `transactionId`.
 
+`submit_and_wait` sends like `manage_invoice` (the same confirmation first) and then asks for the status itself, for at most 45 seconds. Its answer follows the same rules: only `DONE` is an acceptance. If it says processing has not finished, continue with `query_transaction_status`; the data has already been sent, so do not send it again.
+
 ## The status of each invoice
 
 The answer has one result per invoice. In a batch, match the results to the request by the `index` of each operation ([SPEC] 1.8.8.2, point 2).

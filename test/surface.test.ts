@@ -69,7 +69,29 @@ function withSkillPrompts<T extends { prompts: unknown[] }>(surface: T): T {
   }
   return copy;
 }
-const EXPECTED = withSkillPrompts(asServedByV2(withConfirmationId(FIXTURE)));
+/**
+ * submit_and_wait (src/wait.ts), right after manage_invoice: manage_invoice's input schema plus maxWaitSeconds, its
+ * own description and title, and the same annotations otherwise.
+ */
+function withSubmitAndWait<T extends { tools: Array<Record<string, any>> }>(surface: T): T {
+  const copy = JSON.parse(JSON.stringify(surface));
+  const at = copy.tools.findIndex((t: { name: string }) => t.name === "manage_invoice");
+  const tool = JSON.parse(JSON.stringify(copy.tools[at]));
+  tool.name = "submit_and_wait";
+  tool.description =
+    "Submit invoice data to NAV like manage_invoice (the same confirmation first), then wait up to 45 seconds for NAV's " +
+    "processing result per invoice. Only DONE is an acceptance; ABORTED was not accepted. If NAV has not finished in " +
+    "time, the answer gives the transaction ID: continue with query_transaction_status. Stopping the wait does not " +
+    "recall data already sent.";
+  tool.inputSchema.properties.maxWaitSeconds = {
+    description: "How long to wait for the result, in seconds; at most 45, the default",
+    type: "integer", minimum: 1, maximum: 45,
+  };
+  tool.annotations = { ...tool.annotations, title: "Submit Invoice and Wait" };
+  copy.tools.splice(at + 1, 0, tool);
+  return copy;
+}
+const EXPECTED = withSkillPrompts(withSubmitAndWait(asServedByV2(withConfirmationId(FIXTURE))));
 
 /** The surface with every `description` removed, at any depth. */
 function withoutDescriptions(o: unknown): unknown {
@@ -109,7 +131,7 @@ test("the CLI entry point (stdio) serves the same surface", { timeout: 30_000 },
     const surface = await surfaceOf(client);
     assert.deepEqual(surface, EXPECTED);
     // the only changes against the CLI on main: descriptions (tool and parameter texts), the confirmation_id and v2
-    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(withSkillPrompts(asServedByV2(withConfirmationId(CLI_MAIN)))));
+    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(withSkillPrompts(withSubmitAndWait(asServedByV2(withConfirmationId(CLI_MAIN))))));
     assert.notDeepEqual(surface, CLI_MAIN);
   } finally {
     await client.close();

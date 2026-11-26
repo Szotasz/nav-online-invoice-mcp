@@ -23,11 +23,12 @@ Ha nem szeretnéd helyben telepíteni, a [connectors.hu](https://connectors.hu) 
 
 ### Írási eszközök
 - **manage_invoice** - Számlák beküldése (CREATE, MODIFY, STORNO)
+- **submit_and_wait** - Beküldés, mint a manage_invoice (ugyanazzal a megerősítéssel), majd legfeljebb 45 másodperc várakozás a NAV számlánkénti feldolgozási eredményére. Ha addig nem végez, a tranzakció-azonosítót adja vissza: a státusz a query_transaction_status-szal kérdezhető tovább. A várakozás leállítása a már elküldött adatot nem vonja vissza.
 - **manage_annulment** - Számlák technikai érvénytelenítése
 
 ### Megerősítés beküldés előtt
 
-A két írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá nem hagyja:
+A három írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá nem hagyja:
 
 - Az összefoglaló **első sora a környezet**: `>>> ÉLES NAV <<<` vagy `>>> TESZT NAV <<<`. Ha a `NAV_ENV` nincs megadva, a szerver az éles NAV-ot hívja, és az összefoglaló is ÉLES-t mond. Egyedi `NAV_BASE_URL` esetén is ÉLES-t mond, mert nem tudhatja, hová vezet a cím.
 - A `manage_invoice` összefoglalója a beküldendő XML-ből készül, műveletenként: a művelet, a számlaszám, a kelt, az eladó és a vevő adószáma és neve, a nettó, az áfa és a bruttó végösszeg a pénznemmel, MODIFY/STORNO-nál az eredeti számla, és az első öt tétel (a többi darabszámként).
@@ -170,11 +171,12 @@ If you don't want to install locally, [connectors.hu](https://connectors.hu) pro
 
 ### Write Tools
 - **manage_invoice** - Submit invoices (CREATE, MODIFY, STORNO)
+- **submit_and_wait** - Submit like manage_invoice (with the same confirmation), then wait up to 45 seconds for NAV's processing result per invoice. If NAV has not finished by then, it returns the transaction ID: continue with query_transaction_status. Stopping the wait does not recall data already sent.
 - **manage_annulment** - Technical annulment of invoices
 
 ### Confirmation before anything is sent
 
-The two write tools send nothing to NAV until the user approves it:
+The three write tools send nothing to NAV until the user approves it:
 
 - The **first line of the summary is the environment**: `>>> ÉLES NAV <<<` (production) or `>>> TESZT NAV <<<` (test). Without `NAV_ENV` the server calls production NAV, and the summary says ÉLES. With a custom `NAV_BASE_URL` it says ÉLES too, as it cannot know where that address leads.
 - The `manage_invoice` summary is read from the XML to be sent, per operation: the operation, the invoice number, the issue date, the supplier's and the customer's tax number and name, the net, VAT and gross totals with the currency, the original invoice for MODIFY/STORNO, and the first five lines (the rest counted).
