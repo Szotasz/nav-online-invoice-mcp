@@ -1,0 +1,468 @@
+{
+  "tools": [
+    {
+      "name": "query_taxpayer",
+      "description": "Query taxpayer information from NAV by tax number.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "taxNumber": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 8,
+            "description": "8-digit Hungarian tax number"
+          }
+        },
+        "required": [
+          "taxNumber"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Query Taxpayer",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_invoice_data",
+      "description": "Get full invoice data by invoice number from NAV.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoiceNumber": {
+            "type": "string",
+            "description": "Invoice number"
+          },
+          "invoiceDirection": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "OUTBOUND"
+            ],
+            "description": "INBOUND = received, OUTBOUND = issued"
+          },
+          "batchIndex": {
+            "type": "number"
+          },
+          "supplierTaxNumber": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invoiceNumber",
+          "invoiceDirection"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Get Invoice Data",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_invoice_digest",
+      "description": "Search invoices in NAV with filters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "minimum": 1,
+            "default": 1
+          },
+          "invoiceDirection": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "OUTBOUND"
+            ]
+          },
+          "dateFrom": {
+            "type": "string"
+          },
+          "dateTo": {
+            "type": "string"
+          },
+          "insDateTimeFrom": {
+            "type": "string"
+          },
+          "insDateTimeTo": {
+            "type": "string"
+          },
+          "originalInvoiceNumber": {
+            "type": "string"
+          },
+          "taxNumber": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "invoiceCategory": {
+            "type": "string",
+            "enum": [
+              "NORMAL",
+              "SIMPLIFIED",
+              "AGGREGATE"
+            ]
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "TRANSFER",
+              "CASH",
+              "CARD",
+              "VOUCHER",
+              "OTHER"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invoiceDirection"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Search Invoices",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_invoice_check",
+      "description": "Check if an invoice exists in NAV.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoiceNumber": {
+            "type": "string"
+          },
+          "invoiceDirection": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "OUTBOUND"
+            ]
+          },
+          "batchIndex": {
+            "type": "number"
+          },
+          "supplierTaxNumber": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invoiceNumber",
+          "invoiceDirection"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Check Invoice Existence",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_invoice_chain_digest",
+      "description": "Query the modification chain of an invoice.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "minimum": 1,
+            "default": 1
+          },
+          "invoiceNumber": {
+            "type": "string"
+          },
+          "invoiceDirection": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "OUTBOUND"
+            ]
+          },
+          "taxNumber": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invoiceNumber",
+          "invoiceDirection"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Invoice Modification Chain",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_transaction_status",
+      "description": "Check processing status of a submitted invoice transaction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string"
+          },
+          "returnOriginalRequest": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "transactionId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Transaction Status",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_transaction_list",
+      "description": "List transactions within a date range.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "minimum": 1,
+            "default": 1
+          },
+          "insDateFrom": {
+            "type": "string"
+          },
+          "insDateTo": {
+            "type": "string"
+          },
+          "requestStatus": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "insDateFrom",
+          "insDateTo"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List Transactions",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "manage_invoice",
+      "description": "Submit invoice data to NAV (create, modify, or storno).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "CREATE",
+                    "MODIFY",
+                    "STORNO"
+                  ]
+                },
+                "invoiceData": {
+                  "type": "string"
+                },
+                "electronicInvoiceHash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "index",
+                "operation",
+                "invoiceData"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "compressed": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Submit Invoice",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "manage_annulment",
+      "description": "Submit technical annulment for invoices.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "annulmentData": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "index",
+                "annulmentData"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Annul Invoice",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "prompts": [
+    {
+      "name": "search-invoices",
+      "description": "Search for invoices issued or received within a date range",
+      "arguments": [
+        {
+          "name": "direction",
+          "description": "INBOUND = received, OUTBOUND = issued",
+          "required": true
+        },
+        {
+          "name": "dateFrom",
+          "description": "Start date (YYYY-MM-DD)",
+          "required": true
+        },
+        {
+          "name": "dateTo",
+          "description": "End date (YYYY-MM-DD)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "check-taxpayer",
+      "description": "Look up a Hungarian taxpayer by their tax number",
+      "arguments": [
+        {
+          "name": "taxNumber",
+          "description": "8-digit Hungarian tax number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "invoice-details",
+      "description": "Get complete details of a specific invoice",
+      "arguments": [
+        {
+          "name": "invoiceNumber",
+          "description": "Invoice number to look up",
+          "required": true
+        },
+        {
+          "name": "direction",
+          "description": "INBOUND = received, OUTBOUND = issued",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "server": {
+    "name": "nav-online-invoice",
+    "version": "1.0.0",
+    "websiteUrl": "https://github.com/Szotasz/nav-online-invoice-mcp",
+    "description": "MCP server for the Hungarian NAV Online Invoice (Online Számla) API v3.0. Query taxpayers, search invoices, check invoice status, and submit invoices to NAV."
+  }
+}

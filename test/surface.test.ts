@@ -12,6 +12,17 @@ import { connectClient } from "./helpers.js";
 
 const ROOT = join(__dirname, "..");
 const FIXTURE = JSON.parse(readFileSync(join(__dirname, "fixtures", "surface.json"), "utf8"));
+// What the CLI served on main 78bd5a0, before the merge: the same tools with shorter descriptions.
+const CLI_MAIN = JSON.parse(readFileSync(join(__dirname, "fixtures", "cli-surface-main.json"), "utf8"));
+
+/** The surface with every `description` removed, at any depth. */
+function withoutDescriptions(o: unknown): unknown {
+  if (Array.isArray(o)) return o.map(withoutDescriptions);
+  if (o && typeof o === "object") {
+    return Object.fromEntries(Object.entries(o).filter(([k]) => k !== "description").map(([k, v]) => [k, withoutDescriptions(v)]));
+  }
+  return o;
+}
 
 async function surfaceOf(client: Client) {
   return { tools: (await client.listTools()).tools, prompts: (await client.listPrompts()).prompts, server: client.getServerVersion() };
@@ -36,7 +47,11 @@ test("the CLI entry point (stdio) serves the same surface", { timeout: 30_000 },
     env: { PATH: process.env.PATH ?? "" }, stderr: "ignore",
   }));
   try {
-    assert.equal(JSON.stringify(await surfaceOf(client), null, 2), JSON.stringify(FIXTURE, null, 2));
+    const surface = await surfaceOf(client);
+    assert.equal(JSON.stringify(surface, null, 2), JSON.stringify(FIXTURE, null, 2));
+    // the only change against the CLI on main: descriptions (tool and parameter texts); all else is identical
+    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(CLI_MAIN));
+    assert.notDeepEqual(surface, CLI_MAIN);
   } finally {
     await client.close();
   }
