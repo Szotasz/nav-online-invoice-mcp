@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "dev": "tsx src/cli.ts"
+    "dev": "tsx src/cli.ts",
+    "test": "node --import tsx --import ./test/guard.ts --test test/*.test.ts"
   },
   "keywords": [
     "nav",
