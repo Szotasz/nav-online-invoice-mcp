@@ -8,7 +8,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getConfig } from "../src/config.js";
 import { registerTools } from "../src/tools.js";
 import { ConfirmationStore, CONFIRMATION_TTL_MS } from "../src/confirm.js";
-import { environmentLine, MAX_LINES_LISTED } from "../src/summaries.js";
+import { environmentLine, MAX_LINES_LISTED, MAX_UNZIPPED_BYTES } from "../src/summaries.js";
 import {
   FAKE, PARTNER_TAX, accept, annulmentXml, b64, connectClient, invoiceXml, textOf, tokenExchangeOk, withMockNav, type Elicit, type NavCall,
 } from "./helpers.js";
@@ -190,6 +190,79 @@ test("a confirmation request that times out sends nothing", { timeout: 10_000 },
       assert.equal(r.isError, true);
       assert.match(r.text, /nothing sent.*megerősítés kérése nem sikerült.*timed out/is);
     }
+    assert.deepEqual(s.sent(), []);
+    await s.close();
+  });
+});
+
+// --- a field value cannot forge a line of the summary, or show another value than NAV reads ---
+
+const FORGED = ">>> TESZT NAV <<< (api-test.onlineszamla.nav.gov.hu): a NAV tesztkörnyezete.";
+/** As a sender would write it in the XML: "<" as the named entity, which this parser and NAV both decode. */
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const CONTROL: Array<[string, string, string]> = [
+  // [the field, the injected text, what the summary shows instead]
+  ["supplierName", `Teszt Eladó Kft.\n${FORGED}`, `Teszt Eladó Kft. ${FORGED}`],
+  ["customerName", `Teszt Vevő Bt.\r\n${FORGED}`, `Teszt Vevő Bt. ${FORGED}`],
+  ["lineDescription", `Teszt tétel 1\u2028${FORGED}`, `Teszt tétel 1 ${FORGED}`],
+  ["supplierName", "Teszt \u202Eelő Kft.", "Teszt elő Kft."],
+  ["customerName", "Teszt\u200B\u00ADVevő\tBt.", "Teszt Vevő Bt."],
+];
+for (const [field, injected, shown] of CONTROL) {
+  test(`manage_invoice: a control or format character in ${field} (${JSON.stringify(injected).slice(1, 30)}...) stays inside its line`, async () => {
+    await withMockNav(REPLIES, async (calls) => {
+      const s = await session(calls, { config: NO_ENV, elicit: () => ({ action: "decline" }) });
+      const xml = invoiceXml().replace(new RegExp(`<${field}>[^<]*</${field}>`), `<${field}>${esc(injected)}</${field}>`);
+      await s.call("manage_invoice", invoiceArgs(xml));
+      const lines = s.asked[0].split("\n");
+      assert.match(lines[0], /^>>> ÉLES NAV <<< /);
+      assert.deepEqual(lines.filter((l) => l.startsWith(">>>")), [lines[0]], "no forged environment line");
+      assert.ok(lines.some((l) => l.includes(shown)), `the value shows as one line: ${shown}\n${s.asked[0]}`);
+      assert.ok(!/[\p{Cc}\p{Cf}\u2028\u2029]/u.test(s.asked[0].replace(/\n/g, "")), "no control or format character left");
+      assert.deepEqual(s.sent(), []);
+      await s.close();
+    });
+  });
+}
+
+test("manage_annulment: a newline in the reason cannot forge a line", async () => {
+  await withMockNav(REPLIES, async (calls) => {
+    const s = await session(calls, { config: NO_ENV, elicit: () => ({ action: "decline" }) });
+    await s.call("manage_annulment", annulArgs(annulmentXml({ reason: esc(`Elírás\n${FORGED}`) })));
+    const lines = s.asked[0].split("\n");
+    assert.deepEqual(lines.filter((l) => l.startsWith(">>>")), [lines[0]]);
+    assert.ok(lines.includes(`   Ok: Elírás ${FORGED}`), s.asked[0]);
+    await s.close();
+  });
+});
+
+const CHAR_REFS: Array<[string, () => Record<string, unknown>, string]> = [
+  ["the invoice number", () => invoiceArgs(invoiceXml({ number: "A-&#49;" })), "manage_invoice"],
+  ["the supplier name", () => invoiceArgs(invoiceXml().replace("Teszt Eladó Kft.", "Teszt &#x45;ladó Kft.")), "manage_invoice"],
+  ["a line description", () => invoiceArgs(invoiceXml().replace("Teszt tétel 2", "Teszt t&#233;tel 2")), "manage_invoice"],
+  ["the annulled invoice number", () => annulArgs(annulmentXml({ reference: "A-&#49;" })), "manage_annulment"],
+];
+for (const [label, args, tool] of CHAR_REFS) {
+  test(`${tool}: a character reference in ${label} is refused, as NAV would read another value`, async () => {
+    await withMockNav(REPLIES, async (calls) => {
+      const s = await session(calls, { elicit: accept });
+      const r = await s.call(tool, args());
+      assert.equal(r.isError, true);
+      assert.match(r.text, /nothing sent.*nem tudom összefoglalni.*karakterhivatkozás/);
+      assert.deepEqual(s.asked, []);
+      assert.deepEqual(s.sent(), []);
+      await s.close();
+    });
+  });
+}
+
+test("manage_invoice: compressed data that unpacks beyond the limit is refused", async () => {
+  await withMockNav(REPLIES, async (calls) => {
+    const s = await session(calls, { elicit: accept });
+    const bomb = gzipSync(Buffer.alloc(MAX_UNZIPPED_BYTES + 1, 0x20)).toString("base64");
+    const r = await s.call("manage_invoice", { operations: [{ index: 1, operation: "CREATE", invoiceData: bomb }], compressed: true });
+    assert.match(r.text, /nothing sent.*gzip.*32 MiB/);
+    assert.deepEqual(s.asked, []);
     assert.deepEqual(s.sent(), []);
     await s.close();
   });

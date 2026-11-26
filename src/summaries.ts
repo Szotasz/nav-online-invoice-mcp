@@ -8,6 +8,12 @@ import { XMLParser } from "fast-xml-parser";
 /** How many invoice lines are listed one by one; the rest are counted. */
 export const MAX_LINES_LISTED = 5;
 
+/**
+ * The most a compressed operation may unpack to while it is summarised: a guard for the memory of the local process
+ * against a gzip bomb, not a NAV limit.
+ */
+export const MAX_UNZIPPED_BYTES = 32 * 1024 * 1024;
+
 const PRODUCTION_HOST = "api.onlineszamla.nav.gov.hu";
 const TEST_HOST = "api-test.onlineszamla.nav.gov.hu";
 
@@ -46,7 +52,30 @@ const parser = new XMLParser({
 type Node = Record<string, unknown>;
 
 const node = (v: unknown): Node | undefined => (v && typeof v === "object" && !Array.isArray(v) ? (v as Node) : undefined);
-const str = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : typeof v === "number" ? String(v) : undefined);
+/** A value the summary will not show: the operation is refused instead (see str). */
+class UnsafeValue extends Error {}
+
+/**
+ * A field value as the summary shows it. The XML is the sender's, so a value must not be able to forge a line of the
+ * summary or show something else than NAV reads:
+ * - a control or format character (a newline, a bidi override such as U+202E) becomes a space, and runs of
+ *   whitespace (U+2028 and U+2029 included) collapse to one space, so a value stays on its own line;
+ * - a numeric character reference ("&#49;") is refused: the parser here leaves it as written, while NAV decodes it,
+ *   so the summary would show another value than the one sent.
+ */
+const str = (v: unknown): string | undefined => {
+  const raw = typeof v === "string" ? v : typeof v === "number" ? String(v) : undefined;
+  if (raw === undefined) return undefined;
+  if (raw.includes("&#")) throw new UnsafeValue("egy mezőben karakterhivatkozás (&#...) áll");
+  const clean = raw.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim();
+  return clean === "" ? undefined : clean;
+};
+
+/** Any refusal while one operation is read, as UnreadableOperation with that operation's index. */
+function asUnreadable(index: number, err: unknown): Error {
+  if (err instanceof UnsafeValue) return new UnreadableOperation(index, err.message);
+  return err instanceof Error ? err : new Error(String(err));
+}
 const path = (v: unknown, ...keys: string[]): unknown => keys.reduce<unknown>((cur, k) => node(cur)?.[k], v);
 
 /** Base64 (and gzip, when compressed) to the parsed document; throws when it is not base64 or not XML. */
@@ -56,9 +85,9 @@ function decode(index: number, b64: string, compressed: boolean): Node {
   let bytes = Buffer.from(clean, "base64");
   if (compressed) {
     try {
-      bytes = gunzipSync(bytes);
+      bytes = gunzipSync(bytes, { maxOutputLength: MAX_UNZIPPED_BYTES });
     } catch {
-      throw new UnreadableOperation(index, "a tömörítés (gzip) nem bontható ki");
+      throw new UnreadableOperation(index, `a tömörítés (gzip) nem bontható ki ${MAX_UNZIPPED_BYTES / 1024 / 1024} MiB-on belül`);
     }
   }
   let doc: unknown;
@@ -141,24 +170,28 @@ export interface InvoiceOperation {
 export function summarizeInvoiceOperations(baseUrl: string, operations: InvoiceOperation[], compressed: boolean): string {
   const out = [environmentLine(baseUrl), "", `Számla-adatszolgáltatás a NAV-nak (manage_invoice), ${operations.length} művelet:`];
   for (const op of operations) {
-    const data = node(decode(op.index, op.invoiceData, compressed).InvoiceData);
-    if (!data) throw new UnreadableOperation(op.index, "nem InvoiceData dokumentum");
-    const number = str(data.invoiceNumber);
-    const issued = str(data.invoiceIssueDate);
-    if (!number || !issued) throw new UnreadableOperation(op.index, "hiányzik a számlaszám vagy a kelt");
-    out.push("", `#${op.index} ${op.operation}: számlaszám ${number}, kelt ${issued}`);
-    const main = path(data, "invoiceMain");
-    const single = path(main, "invoice");
-    const batch = (path(main, "batchInvoice") as unknown[] | undefined) ?? [];
-    if (single) {
-      out.push(...invoiceLines(op.index, single, op.operation));
-    } else if (batch.length) {
-      out.push(`   Kötegelt módosító okirat, ${batch.length} számlára:`);
-      for (const b of batch) {
-        out.push(`  [köteg ${str(path(b, "batchIndex")) ?? "?"}]`, ...invoiceLines(op.index, path(b, "invoice"), op.operation));
+    try {
+      const data = node(decode(op.index, op.invoiceData, compressed).InvoiceData);
+      if (!data) throw new UnreadableOperation(op.index, "nem InvoiceData dokumentum");
+      const number = str(data.invoiceNumber);
+      const issued = str(data.invoiceIssueDate);
+      if (!number || !issued) throw new UnreadableOperation(op.index, "hiányzik a számlaszám vagy a kelt");
+      out.push("", `#${op.index} ${op.operation}: számlaszám ${number}, kelt ${issued}`);
+      const main = path(data, "invoiceMain");
+      const single = path(main, "invoice");
+      const batch = (path(main, "batchInvoice") as unknown[] | undefined) ?? [];
+      if (single) {
+        out.push(...invoiceLines(op.index, single, op.operation));
+      } else if (batch.length) {
+        out.push(`   Kötegelt módosító okirat, ${batch.length} számlára:`);
+        for (const b of batch) {
+          out.push(`  [köteg ${str(path(b, "batchIndex")) ?? "?"}]`, ...invoiceLines(op.index, path(b, "invoice"), op.operation));
+        }
+      } else {
+        throw new UnreadableOperation(op.index, "nincs benne számla (invoiceMain)");
       }
-    } else {
-      throw new UnreadableOperation(op.index, "nincs benne számla (invoiceMain)");
+    } catch (err) {
+      throw asUnreadable(op.index, err);
     }
   }
   return out.join("\n");
@@ -185,18 +218,22 @@ export interface AnnulmentOperation {
 export function summarizeAnnulmentOperations(baseUrl: string, operations: AnnulmentOperation[]): string {
   const out = [environmentLine(baseUrl), "", `Technikai érvénytelenítés a NAV-nál (manage_annulment), ${operations.length} művelet:`];
   for (const op of operations) {
-    const a = node(decode(op.index, op.annulmentData, false).InvoiceAnnulment);
-    if (!a) throw new UnreadableOperation(op.index, "nem InvoiceAnnulment dokumentum");
-    const ref = str(a.annulmentReference);
-    const code = str(a.annulmentCode);
-    if (!ref || !code) throw new UnreadableOperation(op.index, "hiányzik a számlaszám vagy az érvénytelenítés kódja");
-    const meaning = ANNULMENT_CODES[code];
-    out.push(
-      "",
-      `#${op.index} számlaszám ${ref}`,
-      `   Kód: ${code}${meaning ? ` (${meaning})` : " (a NAV sémájában nem szereplő kód)"}`,
-      `   Ok: ${str(a.annulmentReason) ?? "nincs megadva"}`,
-    );
+    try {
+      const a = node(decode(op.index, op.annulmentData, false).InvoiceAnnulment);
+      if (!a) throw new UnreadableOperation(op.index, "nem InvoiceAnnulment dokumentum");
+      const ref = str(a.annulmentReference);
+      const code = str(a.annulmentCode);
+      if (!ref || !code) throw new UnreadableOperation(op.index, "hiányzik a számlaszám vagy az érvénytelenítés kódja");
+      const meaning = ANNULMENT_CODES[code];
+      out.push(
+        "",
+        `#${op.index} számlaszám ${ref}`,
+        `   Kód: ${code}${meaning ? ` (${meaning})` : " (a NAV sémájában nem szereplő kód)"}`,
+        `   Ok: ${str(a.annulmentReason) ?? "nincs megadva"}`,
+      );
+    } catch (err) {
+      throw asUnreadable(op.index, err);
+    }
   }
   out.push(
     "",

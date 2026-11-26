@@ -35,6 +35,8 @@ A két írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá 
 - Ha az XML nem olvasható, nincs összefoglaló, és az eszköz nem küld semmit.
 - Megerősítést kérni tudó kliensnél (MCP elicitation) a szerver közvetlenül a felhasználót kérdezi. Csak a bepipált jóváhagyás küld; az elutasítás, a megszakítás, a hiba és az időtúllépés nem.
 - Más kliensnél az első hívás csak az összefoglalót és egy `confirmation_id`-t adja vissza. Ugyanazokkal a paraméterekkel és ezzel az azonosítóval hívva megy el a beküldés. Az azonosító egyszer használható, ezekhez a paraméterekhez kötött, és 5 percig érvényes.
+- **A valódi kapu a megerősítés-kérés (elicitation).** A tartalék úton a második hívást a modell az összefoglaló megmutatása nélkül is megteheti: az eszköz szövege ezt tiltja, de kikényszeríteni nem tudja.
+- Az XML mezőértékeiben a vezérlő- és formázó karakterek (pl. sortörés) szóközzé válnak, így egy érték nem írhat új sort az összefoglalóba. Karakterhivatkozást (`&#...`) tartalmazó értéket a szerver nem küld el, mert a NAV mást olvasna ki belőle, mint amit az összefoglaló mutat.
 - Ami nem ment el, arra a válasz kimondja: `nothing sent`.
 
 ## Előfeltételek
@@ -166,6 +168,8 @@ The two write tools send nothing to NAV until the user approves it:
 - If the XML cannot be read, there is no summary, and the tool sends nothing.
 - With a client that supports confirmation requests (MCP elicitation), the server asks the user directly. Only an approval with the box checked sends; a decline, a cancel, an error or a timeout does not.
 - With other clients the first call returns only the summary and a `confirmation_id`. A second call with the same arguments plus that id sends it. The id is single-use, bound to these arguments, and valid for 5 minutes.
+- **The real gate is the confirmation request (elicitation).** On the fallback path the model can make the second call without showing the summary: the tool text forbids it, but cannot enforce it.
+- In the XML field values, control and format characters (a newline, for example) become spaces, so a value cannot write a new line into the summary. A value with a character reference (`&#...`) is not sent, because NAV would read another value from it than the summary shows.
 - Every answer that did not send says so: `nothing sent`.
 
 ## Prerequisites
