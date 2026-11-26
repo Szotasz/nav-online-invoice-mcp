@@ -35,4 +35,4 @@ Every summary that `manage_invoice` or `manage_annulment` shows before sending s
 
 Only the NAV test host is called TESZT. A custom `NAV_BASE_URL` is called ÉLES, because it may lead to production.
 
-Read that first line to the user before they confirm. If they meant to test and it says ÉLES, stop: nothing has been sent yet. Fix `NAV_ENV`, and restart the server.
+Read that first line to the user before they confirm. If the client cannot ask for the confirmation itself, the tool returns the summary and a `confirmation_id` instead: show that summary to the user word for word, and send the `confirmation_id` only after their explicit yes. If they meant to test and it says ÉLES, stop: nothing has been sent yet. Fix `NAV_ENV`, and restart the server.

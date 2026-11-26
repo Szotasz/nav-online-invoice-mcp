@@ -54,4 +54,4 @@ The annulment code says what was wrong ([ANNUL] `AnnulmentCodeType`):
 
 ## Before sending
 
-Both write tools show the user a summary and wait for a confirmation before anything is sent. The first line of the summary names the NAV environment (see `test-and-production`). Tell the user which path you chose and why, in one sentence, before the confirmation. Then check the result with `query_transaction_status` (see `read-submission-status`).
+Both write tools show the user a summary and wait for a confirmation before anything is sent. The first line of the summary names the NAV environment (see `test-and-production`). Tell the user which path you chose and why, in one sentence, before the confirmation. If the client cannot ask for the confirmation itself, the tool returns the summary and a `confirmation_id` instead: show that summary to the user word for word, and send the `confirmation_id` only after their explicit yes. Then check the result with `query_transaction_status` (see `read-submission-status`).
