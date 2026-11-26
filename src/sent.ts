@@ -7,6 +7,10 @@ import { NOTHING_SENT, argsKey } from "./confirm.js";
 //
 // The record lives in memory only: after a server restart it is empty, and the same data can be sent again (with the
 // confirmation, as always). Only a submission NAV took in (one with a transaction ID) is recorded.
+//
+// Two identical calls at the same time (parallel tool calls): the first one marks the data as pending before its
+// confirmation, and the other one sends nothing while it is pending. The mark goes when that call ends, whatever the
+// outcome (sent, declined, refused, failed).
 
 export const RESEND_GUARD_MS = 30 * 60 * 1000;
 
@@ -19,6 +23,7 @@ type Operations = ReadonlyArray<Record<string, unknown>>;
 
 export class SentLedger {
   private sent = new Map<string, SentEntry>();
+  private pending = new Set<string>();
   constructor(private now: () => number = Date.now) {}
 
   /** The same key for both tools: the operations and the compression flag, nothing else. */
@@ -34,6 +39,29 @@ export class SentLedger {
     const t = this.now();
     for (const [k, e] of this.sent) if (t - e.at > RESEND_GUARD_MS) this.sent.delete(k);
     return this.sent.get(this.key(operations, compressed));
+  }
+
+  /** Marks the data as being sent by a call; false when another call already does it. Pair with end(). */
+  begin(operations: Operations, compressed: boolean): boolean {
+    const k = this.key(operations, compressed);
+    if (this.pending.has(k)) return false;
+    this.pending.add(k);
+    return true;
+  }
+
+  end(operations: Operations, compressed: boolean): void {
+    this.pending.delete(this.key(operations, compressed));
+  }
+
+  /** The answer while an identical call is still running: nothing sent by this one. */
+  inProgress(): { content: Array<{ type: "text"; text: string }> } {
+    return {
+      content: [{
+        type: "text",
+        text: `${NOTHING_SENT}: pontosan ezt az adatot egy másik hívás épp most küldi (vagy a megerősítésére vár). ` +
+          `Annak az eredményét várd meg; a transactionId abban lesz, a státuszt utána a query_transaction_status-szal kérdezd.`,
+      }],
+    };
   }
 
   /** The answer to an identical submission: nothing sent, the earlier transaction ID. Not an error. */

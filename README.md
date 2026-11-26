@@ -40,7 +40,7 @@ A három írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóv�
 - Az XML mezőértékeiben a vezérlő- és formázó karakterek (pl. sortörés) szóközzé válnak, így egy érték nem írhat új sort az összefoglalóba. Karakterhivatkozást (`&#...`) tartalmazó értéket a szerver nem küld el, mert a NAV mást olvasna ki belőle, mint amit az összefoglaló mutat.
 - Ami nem ment el, arra a válasz kimondja: `nothing sent`.
 - Ha a kliens a megerősítés közben feladja a hívást, semmi nem megy el, akkor sem, ha a felhasználó utána jóváhagy.
-- Ugyanazt a számlaadatot (`manage_invoice` vagy `submit_and_wait`) a szerver 30 percen belül nem küldi el újra: a második hívás megerősítés nélkül visszaadja az első beküldés tranzakció-azonosítóját. Így egy megszakadt hívás után sem megy ki kétszer ugyanaz.
+- Ugyanazt a számlaadatot (`manage_invoice` vagy `submit_and_wait`) a szerver 30 percen belül nem küldi el újra: a második hívás megerősítés nélkül visszaadja az első beküldés tranzakció-azonosítóját. Így egy megszakadt hívás után sem megy ki kétszer ugyanaz. Két egyszerre induló, azonos hívás közül csak az egyik kér megerősítést és küld. Ez a nyilvántartás csak a szerver memóriájában él, 30 percig: újraindítás után üres.
 
 ### Skillek
 
@@ -190,7 +190,7 @@ The three write tools send nothing to NAV until the user approves it:
 - In the XML field values, control and format characters (a newline, for example) become spaces, so a value cannot write a new line into the summary. A value with a character reference (`&#...`) is not sent, because NAV would read another value from it than the summary shows.
 - Every answer that did not send says so: `nothing sent`.
 - If the client gives up the call during the confirmation, nothing is sent, even if the user approves afterwards.
-- The server does not send the same invoice data (`manage_invoice` or `submit_and_wait`) again within 30 minutes: a second call returns the first submission's transaction ID without a confirmation. So a call cut off midway does not send the same data twice.
+- The server does not send the same invoice data (`manage_invoice` or `submit_and_wait`) again within 30 minutes: a second call returns the first submission's transaction ID without a confirmation. So a call cut off midway does not send the same data twice. Of two identical calls at the same time, only one asks for the confirmation and sends. This record lives only in the server's memory, for 30 minutes: it is empty after a restart.
 
 ### Skills
 

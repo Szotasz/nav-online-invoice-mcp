@@ -221,6 +221,7 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
       // The same data already sent: nothing is sent, not even a confirmation is asked (src/sent.ts).
       const earlier = ledger.find(args.operations, args.compressed);
       if (earlier) return Promise.resolve(ledger.alreadySent(earlier));
+      if (!ledger.begin(args.operations, args.compressed)) return Promise.resolve(ledger.inProgress());
       return withConfirmation({
         server, store, elicitationTimeoutMs, tool: "manage_invoice",
         describe: ({ operations, compressed }: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
@@ -232,7 +233,7 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
           const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
           return { content: [{ type: "text", text: response + extra }] };
         },
-      })(args, ctx);
+      })(args, ctx).finally(() => ledger.end(args.operations, args.compressed));
     }
   );
 
@@ -269,11 +270,12 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
       const startedAt = waitDeps.now();
       const earlier = ledger.find(args.operations, args.compressed);
       if (earlier) return Promise.resolve(ledger.alreadySent(earlier));
+      if (!ledger.begin(args.operations, args.compressed)) return Promise.resolve(ledger.inProgress());
       return withConfirmation({
         server, store, elicitationTimeoutMs, tool: "submit_and_wait",
         describe: (a: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, a.operations, a.compressed),
         run: (a: typeof args, c) => submitAndWait(getConfig(), a, c, formatResponse, waitDeps, startedAt, ledger),
-      })(args, ctx);
+      })(args, ctx).finally(() => ledger.end(args.operations, args.compressed));
     }
   );
 
