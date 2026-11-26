@@ -4,6 +4,8 @@ import { NavClient } from "./nav-client.js";
 import type { NavConfig } from "./types.js";
 import { ConfirmationStore, confirmationIdSchema, withConfirmation } from "./confirm.js";
 import { summarizeAnnulmentOperations, summarizeInvoiceOperations } from "./summaries.js";
+import { MAX_WAIT_MS, realDeps, submitAndWait, type WaitDeps } from "./wait.js";
+import { SentLedger } from "./sent.js";
 
 export function formatResponse(result: { funcCode: string; errorCode?: string; message?: string }, data: unknown, rawXml?: string): string {
   const parts: string[] = [];
@@ -32,11 +34,16 @@ export interface ToolOptions {
   store?: ConfirmationStore;
   /** The elicitation request timeout; the SDK default when not given. */
   elicitationTimeoutMs?: number;
+  /** submit_and_wait's clock and pause (tests); the real ones when not given. */
+  wait?: WaitDeps;
 }
 
 export function registerTools(server: McpServer, getConfig: () => NavConfig, options: ToolOptions = {}): void {
   const store = options.store ?? new ConfirmationStore();
   const elicitationTimeoutMs = options.elicitationTimeoutMs;
+  const waitDeps = options.wait ?? realDeps;
+  // The invoice data already sent, shared by manage_invoice and submit_and_wait (src/sent.ts).
+  const ledger = new SentLedger(waitDeps.now);
 
   // --- Query Tools (read-only, safe) ---
 
@@ -210,17 +217,64 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
       }),
       annotations: { title: "Submit Invoice", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
-    withConfirmation({
-      server, store, elicitationTimeoutMs, tool: "manage_invoice",
-      describe: ({ operations, compressed }) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
-      run: async ({ operations, compressed }) => {
-        const client = new NavClient(getConfig());
-        const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
-        const response = formatResponse(result, data, rawXml);
-        const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
-        return { content: [{ type: "text", text: response + extra }] };
-      },
-    })
+    (args, ctx) => {
+      // The same data already sent: nothing is sent, not even a confirmation is asked (src/sent.ts).
+      const earlier = ledger.find(args.operations, args.compressed);
+      if (earlier) return Promise.resolve(ledger.alreadySent(earlier));
+      return withConfirmation({
+        server, store, elicitationTimeoutMs, tool: "manage_invoice",
+        describe: ({ operations, compressed }: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
+        run: async ({ operations, compressed }: typeof args) => {
+          const client = new NavClient(getConfig());
+          const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
+          if (transactionId) ledger.record(operations, compressed, transactionId);
+          const response = formatResponse(result, data, rawXml);
+          const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
+          return { content: [{ type: "text", text: response + extra }] };
+        },
+      })(args, ctx);
+    }
+  );
+
+  server.registerTool(
+    "submit_and_wait",
+    {
+      description:
+        "Submit invoice data to NAV like manage_invoice (the same confirmation first), then wait up to " +
+        `${MAX_WAIT_MS / 1000} seconds for NAV's processing result per invoice. Only DONE is an acceptance; ABORTED was ` +
+        "not accepted. If NAV has not finished in time, the answer gives the transaction ID: continue with " +
+        "query_transaction_status. Stopping the wait does not recall data already sent.",
+      inputSchema: z.object({
+        operations: z
+          .array(
+            z.object({
+              index: z.number().min(1).max(100),
+              operation: z.enum(["CREATE", "MODIFY", "STORNO"]),
+              invoiceData: z.string().describe("BASE64-encoded invoice XML"),
+              electronicInvoiceHash: z.string().optional().describe("SHA3-512 hash for electronic invoices"),
+            })
+          )
+          .min(1)
+          .max(100)
+          .describe("Array of invoice operations (max 100)"),
+        compressed: z.boolean().default(false).describe("Whether invoiceData is GZIP compressed"),
+        maxWaitSeconds: z.number().int().min(1).max(MAX_WAIT_MS / 1000).optional()
+          .describe(`How long to wait for the result, in seconds; at most ${MAX_WAIT_MS / 1000}, the default`),
+        confirmation_id: confirmationIdSchema,
+      }),
+      annotations: { title: "Submit Invoice and Wait", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
+    // The call budget counts from the start of this call, before the confirmation (src/wait.ts, CALL_BUDGET_MS).
+    (args, ctx) => {
+      const startedAt = waitDeps.now();
+      const earlier = ledger.find(args.operations, args.compressed);
+      if (earlier) return Promise.resolve(ledger.alreadySent(earlier));
+      return withConfirmation({
+        server, store, elicitationTimeoutMs, tool: "submit_and_wait",
+        describe: (a: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, a.operations, a.compressed),
+        run: (a: typeof args, c) => submitAndWait(getConfig(), a, c, formatResponse, waitDeps, startedAt, ledger),
+      })(args, ctx);
+    }
   );
 
   server.registerTool(

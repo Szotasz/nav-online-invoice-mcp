@@ -23,11 +23,12 @@ Ha nem szeretnéd helyben telepíteni, a [connectors.hu](https://connectors.hu) 
 
 ### Írási eszközök
 - **manage_invoice** - Számlák beküldése (CREATE, MODIFY, STORNO)
+- **submit_and_wait** - Beküldés, mint a manage_invoice (ugyanazzal a megerősítéssel), majd legfeljebb 45 másodperc várakozás a NAV számlánkénti feldolgozási eredményére. Ha addig nem végez, a tranzakció-azonosítót adja vissza: a státusz a query_transaction_status-szal kérdezhető tovább. A várakozás leállítása a már elküldött adatot nem vonja vissza.
 - **manage_annulment** - Számlák technikai érvénytelenítése
 
 ### Megerősítés beküldés előtt
 
-A két írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá nem hagyja:
+A három írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá nem hagyja:
 
 - Az összefoglaló **első sora a környezet**: `>>> ÉLES NAV <<<` vagy `>>> TESZT NAV <<<`. Ha a `NAV_ENV` nincs megadva, a szerver az éles NAV-ot hívja, és az összefoglaló is ÉLES-t mond. Egyedi `NAV_BASE_URL` esetén is ÉLES-t mond, mert nem tudhatja, hová vezet a cím.
 - A `manage_invoice` összefoglalója a beküldendő XML-ből készül, műveletenként: a művelet, a számlaszám, a kelt, az eladó és a vevő adószáma és neve, a nettó, az áfa és a bruttó végösszeg a pénznemmel, MODIFY/STORNO-nál az eredeti számla, és az első öt tétel (a többi darabszámként).
@@ -38,6 +39,8 @@ A két írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá 
 - **A valódi kapu a megerősítés-kérés (elicitation).** A tartalék úton a második hívást a modell az összefoglaló megmutatása nélkül is megteheti: az eszköz szövege ezt tiltja, de kikényszeríteni nem tudja.
 - Az XML mezőértékeiben a vezérlő- és formázó karakterek (pl. sortörés) szóközzé válnak, így egy érték nem írhat új sort az összefoglalóba. Karakterhivatkozást (`&#...`) tartalmazó értéket a szerver nem küld el, mert a NAV mást olvasna ki belőle, mint amit az összefoglaló mutat.
 - Ami nem ment el, arra a válasz kimondja: `nothing sent`.
+- Ha a kliens a megerősítés közben feladja a hívást, semmi nem megy el, akkor sem, ha a felhasználó utána jóváhagy.
+- Ugyanazt a számlaadatot (`manage_invoice` vagy `submit_and_wait`) a szerver 30 percen belül nem küldi el újra: a második hívás megerősítés nélkül visszaadja az első beküldés tranzakció-azonosítóját. Így egy megszakadt hívás után sem megy ki kétszer ugyanaz.
 
 ### Skillek
 
@@ -170,11 +173,12 @@ If you don't want to install locally, [connectors.hu](https://connectors.hu) pro
 
 ### Write Tools
 - **manage_invoice** - Submit invoices (CREATE, MODIFY, STORNO)
+- **submit_and_wait** - Submit like manage_invoice (with the same confirmation), then wait up to 45 seconds for NAV's processing result per invoice. If NAV has not finished by then, it returns the transaction ID: continue with query_transaction_status. Stopping the wait does not recall data already sent.
 - **manage_annulment** - Technical annulment of invoices
 
 ### Confirmation before anything is sent
 
-The two write tools send nothing to NAV until the user approves it:
+The three write tools send nothing to NAV until the user approves it:
 
 - The **first line of the summary is the environment**: `>>> ÉLES NAV <<<` (production) or `>>> TESZT NAV <<<` (test). Without `NAV_ENV` the server calls production NAV, and the summary says ÉLES. With a custom `NAV_BASE_URL` it says ÉLES too, as it cannot know where that address leads.
 - The `manage_invoice` summary is read from the XML to be sent, per operation: the operation, the invoice number, the issue date, the supplier's and the customer's tax number and name, the net, VAT and gross totals with the currency, the original invoice for MODIFY/STORNO, and the first five lines (the rest counted).
@@ -185,6 +189,8 @@ The two write tools send nothing to NAV until the user approves it:
 - **The real gate is the confirmation request (elicitation).** On the fallback path the model can make the second call without showing the summary: the tool text forbids it, but cannot enforce it.
 - In the XML field values, control and format characters (a newline, for example) become spaces, so a value cannot write a new line into the summary. A value with a character reference (`&#...`) is not sent, because NAV would read another value from it than the summary shows.
 - Every answer that did not send says so: `nothing sent`.
+- If the client gives up the call during the confirmation, nothing is sent, even if the user approves afterwards.
+- The server does not send the same invoice data (`manage_invoice` or `submit_and_wait`) again within 30 minutes: a second call returns the first submission's transaction ID without a confirmation. So a call cut off midway does not send the same data twice.
 
 ### Skills
 

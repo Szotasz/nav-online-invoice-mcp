@@ -55,10 +55,13 @@ const CASES: Case[] = [
     bodyHas: `<exchangeToken>${EXCHANGE_TOKEN}</exchangeToken>`, write: true },
 ];
 
+// submit_and_wait sends and then waits on queryTransactionStatus, so its cases are in test/wait.test.ts.
+const COVERED_ELSEWHERE = ["submit_and_wait"];
+
 test("the cases cover every registered tool", async () => {
   const client = await connectClient();
   const names = (await client.listTools()).tools.map((t) => t.name).sort();
-  assert.deepEqual(CASES.map((c) => c.tool).sort(), names);
+  assert.deepEqual([...CASES.map((c) => c.tool), ...COVERED_ELSEWHERE].sort(), names);
   await client.close();
 });
 

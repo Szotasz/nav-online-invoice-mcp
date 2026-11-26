@@ -47,15 +47,19 @@ export const tokenExchangeOk = (): Reply => ({
 
 /**
  * Runs `fn` with fetch answered by `replies` (endpoint name -> reply). An endpoint without a reply fails the test.
- * Afterwards the guard is back in place, whatever happened.
+ * A list of replies answers the calls in turn, the last one repeating. Afterwards the guard is back in place,
+ * whatever happened.
  */
-export async function withMockNav<T>(replies: Record<string, Reply>, fn: (calls: NavCall[]) => Promise<T>): Promise<T> {
+export async function withMockNav<T>(replies: Record<string, Reply | Reply[]>, fn: (calls: NavCall[]) => Promise<T>): Promise<T> {
   const calls: NavCall[] = [];
+  const seen: Record<string, number> = {};
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const endpoint = new URL(url).pathname.split("/").pop() ?? "";
     calls.push({ endpoint, url, body: String(init?.body ?? "") });
-    const reply = replies[endpoint];
+    const r = replies[endpoint];
+    const n = (seen[endpoint] = (seen[endpoint] ?? 0) + 1);
+    const reply = Array.isArray(r) ? r[Math.min(n, r.length) - 1] : r;
     if (!reply) throw new Error(`mock NAV: no reply for ${endpoint}`);
     return new Response(navXml(reply), { status: 200, headers: { "Content-Type": "application/xml" } });
   }) as typeof fetch;
@@ -83,6 +87,8 @@ export async function connectClient(
     server?: { connect: (t: InMemoryTransport) => Promise<void> };
     /** The elicitation capability the client declares with `elicit`; form mode when not given. */
     elicitation?: Record<string, Record<string, never>>;
+    /** Set when the server cancels an open confirmation request. */
+    elicitCancelled?: { value: boolean };
   } = {},
 ): Promise<Client> {
   const server = opts.server ?? createServer({ config });
@@ -91,7 +97,8 @@ export async function connectClient(
   const client = new Client({ name: "test", version: "0" }, { capabilities: opts.elicit ? { elicitation: opts.elicitation ?? { form: {} } } : {} });
   if (opts.elicit) {
     const elicit = opts.elicit;
-    client.setRequestHandler('elicitation/create', async (req) => {
+    client.setRequestHandler('elicitation/create', async (req, ctx) => {
+      ctx.mcpReq.signal.addEventListener("abort", () => { if (opts.elicitCancelled) opts.elicitCancelled.value = true; });
       const message = (req.params as { message: string }).message;
       opts.asked?.push(message);
       const r = elicit(message);

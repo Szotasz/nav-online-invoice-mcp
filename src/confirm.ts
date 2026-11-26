@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/server";
+import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 
 // A confirmation step in front of the two tools that send data to NAV (manage_invoice, manage_annulment). The same
 // pattern as billingo-mcp:
@@ -87,18 +87,19 @@ export interface ConfirmOptions<A extends Record<string, unknown>> {
   tool: string;
   /** The summary the user sees before anything is sent. Throws when there is nothing to show; then nothing runs. */
   describe: (args: A) => string;
-  run: (args: A) => Promise<ToolResult>;
+  /** Runs the tool; `ctx` is the request context (abort signal, progress), when the SDK passes one. */
+  run: (args: A, ctx?: ServerContext) => Promise<ToolResult>;
   /** The elicitation request timeout; the SDK default when not set. */
   elicitationTimeoutMs?: number;
 }
 
 /** Wraps a tool handler with the confirmation step. */
 export function withConfirmation<A extends Record<string, unknown>>(o: ConfirmOptions<A>) {
-  return async (args: A): Promise<ToolResult> => {
+  return async (args: A, ctx?: ServerContext): Promise<ToolResult> => {
     const id = typeof args.confirmation_id === "string" ? args.confirmation_id : undefined;
     if (id !== undefined) {
       const verdict = o.store.consume(id, o.tool, args);
-      if (verdict === "ok") return o.run(args);
+      if (verdict === "ok") return o.run(args, ctx);
       const why = {
         unknown: "ismeretlen vagy már felhasznált azonosító",
         expired: "lejárt azonosító",
@@ -129,12 +130,18 @@ export function withConfirmation<A extends Record<string, unknown>>(o: ConfirmOp
               required: ["confirm"],
             },
           },
-          o.elicitationTimeoutMs === undefined ? undefined : { timeout: o.elicitationTimeoutMs },
+          // The call's own signal: a client that gives up the call also ends the open confirmation request.
+          { signal: ctx?.mcpReq.signal, ...(o.elicitationTimeoutMs === undefined ? {} : { timeout: o.elicitationTimeoutMs }) },
         );
       } catch (err) {
         return text(`${NOTHING_SENT}: a megerősítés kérése nem sikerült (${message(err)}).`, true);
       }
-      if (answer.action === "accept" && answer.content?.confirm === true) return o.run(args);
+      if (answer.action === "accept" && answer.content?.confirm === true) {
+        // The client may have given up the call while the user decided (its request timeout runs from the start of the
+        // call): then nobody would receive the answer, so nothing is sent.
+        if (ctx?.mcpReq.signal.aborted) return text(`${NOTHING_SENT}: a hívást a kliens közben megszakította; kérd újra.`, true);
+        return o.run(args, ctx);
+      }
       return text(
         answer.action === "accept"
           ? `${NOTHING_SENT}: a megerősítés nem volt bepipálva.`

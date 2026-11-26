@@ -7,7 +7,7 @@ import { gzipSync } from "node:zlib";
 import { McpServer } from "@modelcontextprotocol/server";
 import { getConfig } from "../src/config.js";
 import { registerTools } from "../src/tools.js";
-import { ConfirmationStore, CONFIRMATION_TTL_MS } from "../src/confirm.js";
+import { ConfirmationStore, CONFIRMATION_TTL_MS, withConfirmation } from "../src/confirm.js";
 import { environmentLine, MAX_LINES_LISTED, MAX_UNZIPPED_BYTES } from "../src/summaries.js";
 import {
   FAKE, PARTNER_TAX, accept, annulmentXml, b64, connectClient, invoiceXml, textOf, tokenExchangeOk, withMockNav, type Elicit, type NavCall,
@@ -355,10 +355,10 @@ test("without elicitation: the first call only summarises; the id sends it once"
     const second = await s.call("manage_invoice", { ...args, confirmation_id: id });
     assert.equal(second.isError, false, second.text);
     assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"]);
+    // The same data again: the sent-ledger answers with the transaction ID before the id is even looked at.
     const again = await s.call("manage_invoice", { ...args, confirmation_id: id });
-    assert.equal(again.isError, true);
-    assert.match(again.text, /nothing sent.*ismeretlen vagy már felhasznált/);
-    assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"], "the id is single-use");
+    assert.match(again.text, /nothing sent.*már elküldtem/);
+    assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"], "sent once");
     await s.close();
   });
 });
@@ -375,6 +375,33 @@ test("without elicitation: the id is bound to the arguments and to the tool", as
     assert.deepEqual(s.sent(), []);
     await s.close();
   });
+});
+
+test("withConfirmation: an accept that arrives after the call was cancelled runs nothing (the second line behind the elicitation signal)", async () => {
+  let ran = false;
+  const fakeServer = {
+    server: {
+      getClientCapabilities: () => ({ elicitation: { form: {} } }),
+      elicitInput: async () => ({ action: "accept", content: { confirm: true } }),
+    },
+  } as unknown as McpServer;
+  const controller = new AbortController();
+  controller.abort();
+  const handler = withConfirmation({
+    server: fakeServer, store: new ConfirmationStore(), tool: "manage_invoice",
+    describe: () => "összefoglaló", run: async () => { ran = true; return { content: [{ type: "text" as const, text: "sent" }] }; },
+  });
+  const r = await handler({}, { mcpReq: { signal: controller.signal } } as never);
+  assert.equal(ran, false);
+  assert.match(r.content[0].text, /nothing sent.*megszakította/);
+});
+
+test("the confirmation store: an id is single-use", () => {
+  const store = new ConfirmationStore();
+  const args = { operations: [{ index: 1 }] };
+  const id = store.issue("manage_annulment", args);
+  assert.equal(store.consume(id, "manage_annulment", args), "ok");
+  assert.equal(store.consume(id, "manage_annulment", args), "unknown");
 });
 
 test("the confirmation store: an id is bound to its tool, even with the same arguments", () => {

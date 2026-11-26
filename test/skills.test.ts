@@ -75,7 +75,7 @@ test("every tool a skill names exists, and every skill a skill points to exists"
   await client.close();
   for (const { name, text } of files()) {
     for (const [, word] of text.matchAll(/`([a-z][a-z_]*)`/g)) {
-      if (/^(query|manage)_/.test(word)) assert.ok(tools.has(word), `${name} names a tool that does not exist: ${word}`);
+      if (/^(query|manage|submit)_/.test(word)) assert.ok(tools.has(word), `${name} names a tool that does not exist: ${word}`);
     }
     for (const [, word] of text.matchAll(/`([a-z]+(?:-[a-z]+)+)`/g)) {
       assert.ok(SKILL_NAMES.includes(word), `${name} points to a skill that does not exist: ${word}`);
