@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NavCallBlocked, guardedFetch, isNavHost } from "./guard.js";
-import { connectClient, textOf, FAKE } from "./helpers.js";
+import { connectClient, textOf, accept, b64, invoiceXml, FAKE } from "./helpers.js";
 
 test("the guard is installed for every test file", () => {
   assert.equal((globalThis as { __navGuardInstalled?: boolean }).__navGuardInstalled, true);
@@ -40,10 +40,11 @@ test("a tool call without the mock layer is refused in both NAV environments and
     { ...FAKE, NAV_BASE_URL: "https://other.nav.gov.hu/invoiceService/v3" },
   ];
   for (const config of configs) {
-    const client = await connectClient(config);
+    // the confirmation is accepted, so the write tool goes as far as the request
+    const client = await connectClient(config, { elicit: accept });
     for (const [name, args] of [
       ["query_taxpayer", { taxNumber: "87654321" }],
-      ["manage_invoice", { operations: [{ index: 1, operation: "CREATE", invoiceData: "PEludm9pY2VEYXRhLz4=" }] }],
+      ["manage_invoice", { operations: [{ index: 1, operation: "CREATE", invoiceData: b64(invoiceXml()) }] }],
     ] as const) {
       const res = await client.callTool({ name, arguments: args });
       assert.equal(res.isError, true, `${name} ${JSON.stringify(config.NAV_ENV)}`);
