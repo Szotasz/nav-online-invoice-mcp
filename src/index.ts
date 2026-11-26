@@ -24,7 +24,7 @@ type SmitheryConfig = z.infer<typeof configSchema>;
 export default function createServer({ config }: { config: Partial<SmitheryConfig> }) {
   const server = new McpServer({
     name: "nav-online-invoice",
-    version: "1.0.0",
+    version: "2.0.0",
     description: "MCP server for the Hungarian NAV Online Invoice (Online Számla) API v3.0. Query taxpayers, search invoices, check invoice status, and submit invoices to NAV.",
     websiteUrl: "https://github.com/Szotasz/nav-online-invoice-mcp",
   });
