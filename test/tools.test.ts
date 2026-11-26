@@ -1,12 +1,14 @@
 // Every tool through the MCP layer, against the mock NAV: one happy path and one NAV error branch (funcCode != OK)
 // each. The request is checked too: the endpoint, the NAV test base URL (NAV_ENV=test), and the key field in the body.
+// The two write tools ask for a confirmation first (test/confirm.test.ts); here the client accepts it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { connectClient, withMockNav, textOf, tokenExchangeOk, PARTNER_TAX, EXCHANGE_TOKEN, type Reply } from "./helpers.js";
+import {
+  connectClient, withMockNav, textOf, tokenExchangeOk, accept, b64, invoiceXml, annulmentXml, PARTNER_TAX, EXCHANGE_TOKEN, type Reply,
+} from "./helpers.js";
 
 const INVOICE = "TESZT-0001";
 const TX = "TESZTTX000000001";
-const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
 const TEST_BASE = "https://api-test.onlineszamla.nav.gov.hu/invoiceService/v3/";
 
 type Case = {
@@ -45,10 +47,10 @@ const CASES: Case[] = [
     endpoint: "queryTransactionList", root: "QueryTransactionListResponse",
     okInner: `<transactionListResult><currentPage>1</currentPage><transaction><transactionId>${TX}</transactionId></transaction></transactionListResult>`,
     okShows: TX, bodyHas: "<insDateFrom>2026-01-01T00:00:00.000Z</insDateFrom>" },
-  { tool: "manage_invoice", args: { operations: [{ index: 1, operation: "CREATE", invoiceData: b64("<InvoiceData>teszt</InvoiceData>") }] },
+  { tool: "manage_invoice", args: { operations: [{ index: 1, operation: "CREATE", invoiceData: b64(invoiceXml()) }] },
     endpoint: "manageInvoice", root: "ManageInvoiceResponse", okInner: `<transactionId>${TX}</transactionId>`, okShows: TX,
     bodyHas: `<exchangeToken>${EXCHANGE_TOKEN}</exchangeToken>`, write: true },
-  { tool: "manage_annulment", args: { operations: [{ index: 1, annulmentData: b64("<InvoiceAnnulment>teszt</InvoiceAnnulment>") }] },
+  { tool: "manage_annulment", args: { operations: [{ index: 1, annulmentData: b64(annulmentXml()) }] },
     endpoint: "manageAnnulment", root: "ManageAnnulmentResponse", okInner: `<transactionId>${TX}</transactionId>`, okShows: TX,
     bodyHas: `<exchangeToken>${EXCHANGE_TOKEN}</exchangeToken>`, write: true },
 ];
@@ -65,7 +67,7 @@ for (const c of CASES) {
     const replies: Record<string, Reply> = { [c.endpoint]: { root: c.root, inner: c.okInner } };
     if (c.write) replies.tokenExchange = tokenExchangeOk();
     await withMockNav(replies, async (calls) => {
-      const client = await connectClient();
+      const client = await connectClient(undefined, c.write ? { elicit: accept } : {});
       const res = await client.callTool({ name: c.tool, arguments: c.args });
       const text = textOf(res);
       assert.ok(!res.isError, text);
@@ -86,7 +88,7 @@ for (const c of CASES) {
     };
     if (c.write) replies.tokenExchange = tokenExchangeOk();
     await withMockNav(replies, async () => {
-      const client = await connectClient();
+      const client = await connectClient(undefined, c.write ? { elicit: accept } : {});
       const text = textOf(await client.callTool({ name: c.tool, arguments: c.args }));
       assert.match(text, /^## Error/);
       assert.ok(text.includes("- **Status**: ERROR"), text);
@@ -101,7 +103,7 @@ for (const c of CASES) {
 for (const c of CASES.filter((x) => x.write)) {
   test(`${c.tool}: a failed token exchange stops before anything is submitted`, async () => {
     await withMockNav({ tokenExchange: { root: "TokenExchangeResponse", funcCode: "ERROR", errorCode: "INVALID_SECURITY_USER" } }, async (calls) => {
-      const client = await connectClient();
+      const client = await connectClient(undefined, { elicit: accept });
       const res = await client.callTool({ name: c.tool, arguments: c.args });
       assert.equal(res.isError, true);
       assert.match(textOf(res), /tokenExchange failed: INVALID_SECURITY_USER/);

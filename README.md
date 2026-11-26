@@ -25,6 +25,18 @@ Ha nem szeretnéd helyben telepíteni, a [connectors.hu](https://connectors.hu) 
 - **manage_invoice** - Számlák beküldése (CREATE, MODIFY, STORNO)
 - **manage_annulment** - Számlák technikai érvénytelenítése
 
+### Megerősítés beküldés előtt
+
+A két írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá nem hagyja:
+
+- Az összefoglaló **első sora a környezet**: `>>> ÉLES NAV <<<` vagy `>>> TESZT NAV <<<`. Ha a `NAV_ENV` nincs megadva, a szerver az éles NAV-ot hívja, és az összefoglaló is ÉLES-t mond. Egyedi `NAV_BASE_URL` esetén is ÉLES-t mond, mert nem tudhatja, hová vezet a cím.
+- A `manage_invoice` összefoglalója a beküldendő XML-ből készül, műveletenként: a művelet, a számlaszám, a kelt, az eladó és a vevő adószáma és neve, a nettó, az áfa és a bruttó végösszeg a pénznemmel, MODIFY/STORNO-nál az eredeti számla, és az első öt tétel (a többi darabszámként).
+- A `manage_annulment` összefoglalója a számlaszámot, az érvénytelenítés kódját és okát mutatja. Kimondja azt is, hogy a technikai érvénytelenítést a NAV feldolgozása után az Online Számla webes felületén még jóvá kell hagyni (a NAV interfész-specifikációja szerint).
+- Ha az XML nem olvasható, nincs összefoglaló, és az eszköz nem küld semmit.
+- Megerősítést kérni tudó kliensnél (MCP elicitation) a szerver közvetlenül a felhasználót kérdezi. Csak a bepipált jóváhagyás küld; az elutasítás, a megszakítás, a hiba és az időtúllépés nem.
+- Más kliensnél az első hívás csak az összefoglalót és egy `confirmation_id`-t adja vissza. Ugyanazokkal a paraméterekkel és ezzel az azonosítóval hívva megy el a beküldés. Az azonosító egyszer használható, ezekhez a paraméterekhez kötött, és 5 percig érvényes.
+- Ami nem ment el, arra a válasz kimondja: `nothing sent`.
+
 ## Előfeltételek
 
 NAV Online Számla technikai felhasználó szükséges. Regisztráció:
@@ -143,6 +155,18 @@ If you don't want to install locally, [connectors.hu](https://connectors.hu) pro
 ### Write Tools
 - **manage_invoice** - Submit invoices (CREATE, MODIFY, STORNO)
 - **manage_annulment** - Technical annulment of invoices
+
+### Confirmation before anything is sent
+
+The two write tools send nothing to NAV until the user approves it:
+
+- The **first line of the summary is the environment**: `>>> ÉLES NAV <<<` (production) or `>>> TESZT NAV <<<` (test). Without `NAV_ENV` the server calls production NAV, and the summary says ÉLES. With a custom `NAV_BASE_URL` it says ÉLES too, as it cannot know where that address leads.
+- The `manage_invoice` summary is read from the XML to be sent, per operation: the operation, the invoice number, the issue date, the supplier's and the customer's tax number and name, the net, VAT and gross totals with the currency, the original invoice for MODIFY/STORNO, and the first five lines (the rest counted).
+- The `manage_annulment` summary shows the invoice number, the annulment code and the reason. It also says that a technical annulment still has to be approved on the Online Számla web interface after NAV has processed it (per the NAV interface specification).
+- If the XML cannot be read, there is no summary, and the tool sends nothing.
+- With a client that supports confirmation requests (MCP elicitation), the server asks the user directly. Only an approval with the box checked sends; a decline, a cancel, an error or a timeout does not.
+- With other clients the first call returns only the summary and a `confirmation_id`. A second call with the same arguments plus that id sends it. The id is single-use, bound to these arguments, and valid for 5 minutes.
+- Every answer that did not send says so: `nothing sent`.
 
 ## Prerequisites
 

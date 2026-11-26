@@ -2,6 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { NavClient } from "./nav-client.js";
 import type { NavConfig } from "./types.js";
+import { ConfirmationStore, confirmationIdSchema, withConfirmation } from "./confirm.js";
+import { summarizeAnnulmentOperations, summarizeInvoiceOperations } from "./summaries.js";
 
 export function formatResponse(result: { funcCode: string; errorCode?: string; message?: string }, data: unknown, rawXml?: string): string {
   const parts: string[] = [];
@@ -24,7 +26,18 @@ export function formatResponse(result: { funcCode: string; errorCode?: string; m
 
 // The 9 tools and 3 prompts, registered once for both entry points (src/cli.ts and the Smithery src/index.ts).
 // getConfig is called per tool call, so a missing setting fails that call, not the server start.
-export function registerTools(server: McpServer, getConfig: () => NavConfig): void {
+// The two write tools (manage_invoice, manage_annulment) ask for a confirmation before anything is sent (src/confirm.ts).
+export interface ToolOptions {
+  /** The confirmation ids of this server; a fresh store when not given. */
+  store?: ConfirmationStore;
+  /** The elicitation request timeout; the SDK default when not given. */
+  elicitationTimeoutMs?: number;
+}
+
+export function registerTools(server: McpServer, getConfig: () => NavConfig, options: ToolOptions = {}): void {
+  const store = options.store ?? new ConfirmationStore();
+  const elicitationTimeoutMs = options.elicitationTimeoutMs;
+
   // --- Query Tools (read-only, safe) ---
 
   server.tool(
@@ -178,15 +191,20 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig): vo
         .max(100)
         .describe("Array of invoice operations (max 100)"),
       compressed: z.boolean().default(false).describe("Whether invoiceData is GZIP compressed"),
+      confirmation_id: confirmationIdSchema,
     },
     { title: "Submit Invoice", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-    async ({ operations, compressed }) => {
-      const client = new NavClient(getConfig());
-      const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
-      const response = formatResponse(result, data, rawXml);
-      const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
-      return { content: [{ type: "text", text: response + extra }] };
-    }
+    withConfirmation({
+      server, store, elicitationTimeoutMs, tool: "manage_invoice",
+      describe: ({ operations, compressed }) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
+      run: async ({ operations, compressed }) => {
+        const client = new NavClient(getConfig());
+        const { result, data, rawXml, transactionId } = await client.manageInvoice(operations, compressed);
+        const response = formatResponse(result, data, rawXml);
+        const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
+        return { content: [{ type: "text", text: response + extra }] };
+      },
+    })
   );
 
   server.tool(
@@ -202,15 +220,20 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig): vo
         )
         .min(1)
         .max(100),
+      confirmation_id: confirmationIdSchema,
     },
     { title: "Annul Invoice", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-    async ({ operations }) => {
-      const client = new NavClient(getConfig());
-      const { result, data, rawXml, transactionId } = await client.manageAnnulment(operations);
-      const response = formatResponse(result, data, rawXml);
-      const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
-      return { content: [{ type: "text", text: response + extra }] };
-    }
+    withConfirmation({
+      server, store, elicitationTimeoutMs, tool: "manage_annulment",
+      describe: ({ operations }) => summarizeAnnulmentOperations(getConfig().baseUrl, operations),
+      run: async ({ operations }) => {
+        const client = new NavClient(getConfig());
+        const { result, data, rawXml, transactionId } = await client.manageAnnulment(operations);
+        const response = formatResponse(result, data, rawXml);
+        const extra = transactionId ? `\n**Transaction ID**: \`${transactionId}\`` : "";
+        return { content: [{ type: "text", text: response + extra }] };
+      },
+    })
   );
 
   // --- Prompts ---
