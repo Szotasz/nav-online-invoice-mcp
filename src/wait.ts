@@ -18,6 +18,13 @@ import type { NavConfig } from "./types.js";
  * to extend its timeout because of them.
  */
 export const MAX_WAIT_MS = 45_000;
+/**
+ * The whole call's budget. The client's request timeout runs from the moment it sends tools/call, so the time the
+ * user spends on the confirmation and the submission itself count too: the wait gets what is left of this budget, at
+ * most MAX_WAIT_MS. With no time left, the answer comes at once (the transaction ID, "not finished"), so it still
+ * arrives before the client gives up and the model does not send the invoice again.
+ */
+export const CALL_BUDGET_MS = 50_000;
 const FIRST_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 8_000;
 
@@ -146,7 +153,9 @@ export function formatOutcome(transactionId: string, outcome: WaitOutcome, maxWa
         "", "Only DONE is an acceptance. ABORTED was not accepted: fix the data and send the same operation again."].join("\n");
     case "timeout":
       return ["## Sent, processing not finished yet", head,
-        `The data was sent to NAV. NAV has not finished processing it within ${Math.round(maxWaitMs / 1000)} s.`,
+        outcome.polls === 0
+          ? "The data was sent to NAV. This call had no time left to wait for the result (the confirmation took most of it)."
+          : `The data was sent to NAV. NAV has not finished processing it within ${Math.round(maxWaitMs / 1000)} s.`,
         "", "Last status per invoice:", ...resultLines(outcome.results), "", statusHint(transactionId)].join("\n");
     case "aborted":
       return ["## Waiting stopped", head,
@@ -166,6 +175,8 @@ export async function submitAndWait(
   ctx: Pick<ServerContext, "mcpReq"> | undefined,
   formatSubmission: (result: { funcCode: string; errorCode?: string; message?: string }, data: unknown, rawXml?: string) => string,
   deps: WaitDeps = realDeps,
+  /** When the tools/call started (deps.now()); the call budget counts from here. */
+  startedAt: number = deps.now(),
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   const client = new NavClient(config);
   const { result, data, rawXml, transactionId } = await client.manageInvoice(args.operations, args.compressed);
@@ -174,7 +185,8 @@ export async function submitAndWait(
     // data in, whatever else the answer says, so then the wait runs and the result per invoice decides.
     return { content: [{ type: "text", text: formatSubmission(result, data, rawXml) }], isError: true };
   }
-  const maxWaitMs = Math.min(MAX_WAIT_MS, (args.maxWaitSeconds ?? Infinity) * 1000);
+  const left = CALL_BUDGET_MS - (deps.now() - startedAt);
+  const maxWaitMs = Math.max(0, Math.min(MAX_WAIT_MS, (args.maxWaitSeconds ?? Infinity) * 1000, left));
   const progressToken = ctx?.mcpReq._meta?.progressToken;
   const outcome = await waitForResult(client, transactionId, args.operations.length, {
     maxWaitMs,

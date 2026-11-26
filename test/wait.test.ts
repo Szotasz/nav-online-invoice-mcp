@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { getConfig } from "../src/config.js";
 import { registerTools, formatResponse } from "../src/tools.js";
 import { ConfirmationStore } from "../src/confirm.js";
-import { MAX_WAIT_MS, submitAndWait, waitForResult, type WaitDeps } from "../src/wait.js";
+import { CALL_BUDGET_MS, MAX_WAIT_MS, submitAndWait, waitForResult, type WaitDeps } from "../src/wait.js";
 import {
   FAKE, accept, b64, connectClient, invoiceXml, textOf, tokenExchangeOk, withMockNav, type Elicit, type NavCall, type Reply,
 } from "./helpers.js";
@@ -39,12 +39,13 @@ const replies = (statuses: Reply[]): Record<string, Reply | Reply[]> => ({
 });
 
 /** A fake clock: sleep() only moves it, and throws once the signal is aborted. */
-function fakeClock(): WaitDeps & { elapsed: () => number; pauses: number[] } {
+function fakeClock(): WaitDeps & { elapsed: () => number; pauses: number[]; advance: (ms: number) => void } {
   let t = 0;
   const pauses: number[] = [];
   return {
     pauses,
     elapsed: () => t,
+    advance: (ms) => { t += ms; },
     now: () => t,
     // The clock moves even when the signal is aborted, so a wait that ignored the stop would still reach its limit.
     sleep: async (ms, signal) => {
@@ -137,6 +138,44 @@ test("maxWaitSeconds lowers the wait; above 45 it is refused before anything is 
     const over = await s.call(ARGS({ maxWaitSeconds: 46 }));
     assert.equal(over.isError, true);
     assert.equal(s.sent().length, sentBefore, "nothing more was sent");
+    await s.close();
+  });
+});
+
+// The client's request timeout runs from when it sent tools/call: the confirmation and the submission count too.
+test("the wait gets what is left of the 50 s call budget after a slow confirmation", async () => {
+  await withMockNav(replies([status({ index: 1, status: "PROCESSING" })]), async (calls) => {
+    const clock = fakeClock();
+    // the user takes 30 s to confirm
+    const s = await session(calls, { clock, elicit: () => { clock.advance(30_000); return { action: "accept", content: { confirm: true } }; } });
+    const r = await s.call(ARGS());
+    assert.equal(clock.elapsed(), CALL_BUDGET_MS, "the call ends at the budget, not at 30 + 45 s");
+    assert.match(r.text, /within 20 s/);
+    await s.close();
+  });
+});
+
+test("no time left after the confirmation: sent, no status query, the transaction ID at once", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    const clock = fakeClock();
+    const s = await session(calls, { clock, elicit: () => { clock.advance(55_000); return { action: "accept", content: { confirm: true } }; } });
+    const r = await s.call(ARGS());
+    assert.equal(r.isError, false);
+    assert.match(r.text, /^## Sent, processing not finished yet/);
+    assert.ok(r.text.includes(`**Transaction ID**: \`${TX}\``), r.text);
+    assert.match(r.text, /had no time left to wait/);
+    assert.deepEqual(s.sent(), ["tokenExchange", "manageInvoice"], "sent once, no status query");
+    assert.equal(clock.elapsed(), 55_000);
+    await s.close();
+  });
+});
+
+test("maxWaitSeconds still wins when it is shorter than what is left", async () => {
+  await withMockNav(replies([status({ index: 1, status: "PROCESSING" })]), async (calls) => {
+    const clock = fakeClock();
+    const s = await session(calls, { clock, elicit: () => { clock.advance(10_000); return { action: "accept", content: { confirm: true } }; } });
+    await s.call(ARGS({ maxWaitSeconds: 5 }));
+    assert.equal(clock.elapsed(), 15_000);
     await s.close();
   });
 });

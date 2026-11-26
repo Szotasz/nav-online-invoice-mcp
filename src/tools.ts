@@ -255,11 +255,15 @@ export function registerTools(server: McpServer, getConfig: () => NavConfig, opt
       }),
       annotations: { title: "Submit Invoice and Wait", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
-    withConfirmation({
-      server, store, elicitationTimeoutMs, tool: "submit_and_wait",
-      describe: ({ operations, compressed }) => summarizeInvoiceOperations(getConfig().baseUrl, operations, compressed),
-      run: (args, ctx) => submitAndWait(getConfig(), args, ctx, formatResponse, waitDeps),
-    })
+    // The call budget counts from the start of this call, before the confirmation (src/wait.ts, CALL_BUDGET_MS).
+    (args, ctx) => {
+      const startedAt = waitDeps.now();
+      return withConfirmation({
+        server, store, elicitationTimeoutMs, tool: "submit_and_wait",
+        describe: (a: typeof args) => summarizeInvoiceOperations(getConfig().baseUrl, a.operations, a.compressed),
+        run: (a: typeof args, c) => submitAndWait(getConfig(), a, c, formatResponse, waitDeps, startedAt),
+      })(args, ctx);
+    }
   );
 
   server.registerTool(
