@@ -43,5 +43,5 @@ Technical validation messages (`technicalValidationMessages`) mean a schema viol
 
 - **`DONE` without messages:** accepted.
 - **`DONE` with `WARN`:** accepted, with a warning. Quote the message, and see `choose-correction-path` if the data must be fixed.
-- **`ABORTED`:** not accepted. Read every message of that invoice, not only the first. A wrong report is fixed with a new, correct report (see `choose-correction-path`).
+- **`ABORTED`:** not accepted ([SPEC] 1.8.8.2, point 3), so there is nothing at the NAV to modify, cancel or annul. Every correction path assumes an accepted report: a technical annulment applies only to a report that reached `DONE` ([SPEC] 2.4.1, point 1), and the specification advises sending a modification only after the original report's `DONE` ([SPEC] 2.5). Read every message of that invoice, not only the first, fix the data, and send the same operation again with `manage_invoice` (for a new invoice, `CREATE`). Do not use `choose-correction-path` for it.
 - **Anything else:** not finished yet. Check again later.
