@@ -39,6 +39,18 @@ A két írási eszköz semmit nem küld a NAV-nak, amíg a felhasználó jóvá 
 - Az XML mezőértékeiben a vezérlő- és formázó karakterek (pl. sortörés) szóközzé válnak, így egy érték nem írhat új sort az összefoglalóba. Karakterhivatkozást (`&#...`) tartalmazó értéket a szerver nem küld el, mert a NAV mást olvasna ki belőle, mint amit az összefoglaló mutat.
 - Ami nem ment el, arra a válasz kimondja: `nothing sent`.
 
+### Skillek
+
+A szerver az eszközök mellé öt NAV-útmutatót is ad MCP skillként (skills-kiterjesztés, SDK v2.4+), így a skilleket támogató kliens akkor tölti be a szabályokat, amikor szükség van rájuk. Minden állításuk a NAV hivatalos dokumentációjából (nav-gov-hu/Online-Invoice) jön, fejezet- és pontszintű forrással:
+
+- `read-submission-status`: a beküldés státuszának olvasása (csak a `DONE` számít teljesítettnek; `WARN` mellett befogadva, `ERROR` mellett nem).
+- `choose-correction-path`: MODIFY, STORNO vagy technikai érvénytelenítés, és hogy az utóbbit a webes felületen jóvá kell hagyni.
+- `look-up-taxpayer`: adózó-lekérdezés a 8 jegyű törzsszámmal, és mit ad vissza a válasz.
+- `test-and-production`: a teszt és az éles környezet, a `NAV_ENV` (nélküle éles), és az összefoglaló első sora.
+- `search-invoices-by-period`: keresés egy időszakra (irány, legfeljebb 35 napos tartomány, lapozás) és a módosítási lánc.
+
+A skilleket még nem támogató kliensnek minden útmutató `skill-<név>` nevű promptként is elérhető. Az útmutatók a `skills/` mappában vannak.
+
 ## Előfeltételek
 
 NAV Online Számla technikai felhasználó szükséges. Regisztráció:
@@ -173,6 +185,18 @@ The two write tools send nothing to NAV until the user approves it:
 - **The real gate is the confirmation request (elicitation).** On the fallback path the model can make the second call without showing the summary: the tool text forbids it, but cannot enforce it.
 - In the XML field values, control and format characters (a newline, for example) become spaces, so a value cannot write a new line into the summary. A value with a character reference (`&#...`) is not sent, because NAV would read another value from it than the summary shows.
 - Every answer that did not send says so: `nothing sent`.
+
+### Skills
+
+The server ships five NAV guides with the tools, as MCP skills (the skills extension, SDK v2.4+), so a client that supports skills can load the rules when they are needed. Every statement in them comes from the NAV's official documentation (nav-gov-hu/Online-Invoice), with the section and point as the source:
+
+- `read-submission-status`: reading a submission's status (only `DONE` counts as completed; accepted with `WARN`, not with `ERROR`).
+- `choose-correction-path`: MODIFY, STORNO or technical annulment, and that the latter needs approval on the web interface.
+- `look-up-taxpayer`: a taxpayer lookup with the 8-digit taxpayer ID, and what the answer holds.
+- `test-and-production`: the test and the production environment, `NAV_ENV` (production without it), and the summary's first line.
+- `search-invoices-by-period`: a search for a period (direction, at most 35 days per range, pages) and the modification chain.
+
+For clients that do not support skills yet, each guide is also a prompt named `skill-<name>`. The guides are in `skills/`.
 
 ## Prerequisites
 

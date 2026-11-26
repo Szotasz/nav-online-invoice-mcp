@@ -4,6 +4,7 @@
 // tools with shorter descriptions; nothing else differed.)
 // The one change since: the two write tools take an optional confirmation_id (the confirmation step, src/confirm.ts).
 // withConfirmationId() adds exactly that to the main surface, so any other drift still fails.
+// The skill-<name> prompts of the NAV guides come after main's three prompts (withSkillPrompts()).
 // The move to SDK v2 (2.4.0, zod 4) changed how the same tools are written out; asServedByV2() applies exactly those
 // changes to the main fixture, and the comparison is deep equality, so the key order inside a schema does not count:
 //   - inputSchema.$schema is JSON Schema 2020-12 instead of draft-07;
@@ -17,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Client } from "@modelcontextprotocol/client";
-import { connectClient } from "./helpers.js";
+import { connectClient, SKILL_NAMES } from "./helpers.js";
 
 const ROOT = join(__dirname, "..");
 const FIXTURE = JSON.parse(readFileSync(join(__dirname, "fixtures", "surface.json"), "utf8"));
@@ -55,7 +56,20 @@ function asServedByV2<T>(surface: T): T {
   }
   return copy;
 }
-const EXPECTED = asServedByV2(withConfirmationId(FIXTURE));
+/**
+ * The NAV guides (skills/, src/skills.ts) are also served as prompts named skill-<name>, after the three prompts of
+ * main. The names are pinned in test/helpers.ts (SKILL_NAMES); the descriptions are the SKILL.md frontmatter's.
+ */
+function withSkillPrompts<T extends { prompts: unknown[] }>(surface: T): T {
+  const copy = JSON.parse(JSON.stringify(surface));
+  for (const name of SKILL_NAMES) {
+    const md = readFileSync(join(ROOT, "skills", name, "SKILL.md"), "utf8");
+    const description = /^description:[ \t]*(.+)$/m.exec(md)?.[1].trim();
+    copy.prompts.push({ name: `skill-${name}`, description });
+  }
+  return copy;
+}
+const EXPECTED = withSkillPrompts(asServedByV2(withConfirmationId(FIXTURE)));
 
 /** The surface with every `description` removed, at any depth. */
 function withoutDescriptions(o: unknown): unknown {
@@ -95,7 +109,7 @@ test("the CLI entry point (stdio) serves the same surface", { timeout: 30_000 },
     const surface = await surfaceOf(client);
     assert.deepEqual(surface, EXPECTED);
     // the only changes against the CLI on main: descriptions (tool and parameter texts), the confirmation_id and v2
-    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(asServedByV2(withConfirmationId(CLI_MAIN))));
+    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(withSkillPrompts(asServedByV2(withConfirmationId(CLI_MAIN)))));
     assert.notDeepEqual(surface, CLI_MAIN);
   } finally {
     await client.close();

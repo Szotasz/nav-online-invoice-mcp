@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { McpServer } from "@modelcontextprotocol/server";
 import { getConfig } from "./config.js";
 import { registerTools } from "./tools.js";
+import { registerSkills } from "./skills.js";
 
 const server = new McpServer({
   name: "nav-online-invoice",
@@ -13,6 +14,8 @@ const server = new McpServer({
 });
 
 registerTools(server, () => getConfig());
+// The skills are attached before connecting (the extension declares its capability at connect).
+registerSkills(server);
 
 const transport = new StdioServerTransport();
 server.connect(transport).then(() => {
