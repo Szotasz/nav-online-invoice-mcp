@@ -277,6 +277,9 @@ const UNREADABLE: Array<[string, Record<string, unknown>]> = [
   ["no supplier", invoiceArgs(invoiceXml().replace(/<supplierInfo>.*<\/supplierInfo>/, ""))],
   ["no gross total", invoiceArgs(invoiceXml().replace(/<summaryGrossData>.*<\/summaryGrossData>/, ""))],
   ["gzip flag on plain data", { ...invoiceArgs(), compressed: true }],
+  ["a DOCTYPE with an internal entity", invoiceArgs(invoiceXml()
+    .replace('<?xml version="1.0" encoding="UTF-8"?>', '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE InvoiceData [<!ENTITY e "Teszt Eladó Kft.">]>')
+    .replace("<supplierName>Teszt Eladó Kft.</supplierName>", "<supplierName>&e;</supplierName>"))],
   ["a readable first and an unreadable second operation", { operations: [invoiceArgs().operations[0], { index: 2, operation: "CREATE", invoiceData: b64("<x/>") }] }],
 ];
 for (const [label, args] of UNREADABLE) {

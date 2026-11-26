@@ -90,9 +90,12 @@ function decode(index: number, b64: string, compressed: boolean): Node {
       throw new UnreadableOperation(index, `a tömörítés (gzip) nem bontható ki ${MAX_UNZIPPED_BYTES / 1024 / 1024} MiB-on belül`);
     }
   }
+  const xml = bytes.toString("utf8");
+  // A DOCTYPE can define entities that this parser expands; the summary must show the document as written.
+  if (/<!DOCTYPE/i.test(xml)) throw new UnreadableOperation(index, "DOCTYPE-ot tartalmaz");
   let doc: unknown;
   try {
-    doc = parser.parse(bytes.toString("utf8"), true);
+    doc = parser.parse(xml, true);
   } catch (err) {
     throw new UnreadableOperation(index, `nem érvényes XML (${err instanceof Error ? err.message.split("\n")[0] : String(err)})`);
   }
