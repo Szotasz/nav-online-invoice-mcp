@@ -46,10 +46,11 @@ function fakeClock(): WaitDeps & { elapsed: () => number; pauses: number[] } {
     pauses,
     elapsed: () => t,
     now: () => t,
+    // The clock moves even when the signal is aborted, so a wait that ignored the stop would still reach its limit.
     sleep: async (ms, signal) => {
-      if (signal?.aborted) throw signal.reason;
       pauses.push(ms);
       t += ms;
+      if (signal?.aborted) throw signal.reason;
     },
   };
 }
