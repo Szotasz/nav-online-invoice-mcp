@@ -2,9 +2,7 @@
 // Nothing is sent anywhere. All data is made up: the tax numbers fail the Hungarian check digit on purpose
 // (12345678 and 87654321 are not valid tax numbers), and every name and invoice number is fictional.
 import { createCipheriv } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import createServer from "../src/index.js";
 import { guardedFetch } from "./guard.js";
 
@@ -69,7 +67,7 @@ export async function withMockNav<T>(replies: Record<string, Reply>, fn: (calls:
 }
 
 /** The answer a test client gives to a confirmation request, or an Error to fail the request. */
-export type Elicit = (message: string) => { action: "accept" | "decline" | "cancel"; content?: Record<string, unknown> } | Error;
+export type Elicit = (message: string) => { action: "accept" | "decline" | "cancel"; content?: Record<string, string | number | boolean | string[]> } | Error;
 export const accept: Elicit = () => ({ action: "accept", content: { confirm: true } });
 
 /**
@@ -79,15 +77,21 @@ export const accept: Elicit = () => ({ action: "accept", content: { confirm: tru
  */
 export async function connectClient(
   config: Record<string, string> = FAKE,
-  opts: { elicit?: Elicit; asked?: string[]; server?: { connect: (t: InMemoryTransport) => Promise<void> } } = {},
+  opts: {
+    elicit?: Elicit;
+    asked?: string[];
+    server?: { connect: (t: InMemoryTransport) => Promise<void> };
+    /** The elicitation capability the client declares with `elicit`; form mode when not given. */
+    elicitation?: Record<string, Record<string, never>>;
+  } = {},
 ): Promise<Client> {
   const server = opts.server ?? createServer({ config });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await server.connect(serverSide);
-  const client = new Client({ name: "test", version: "0" }, { capabilities: opts.elicit ? { elicitation: { form: {} } } : {} });
+  const client = new Client({ name: "test", version: "0" }, { capabilities: opts.elicit ? { elicitation: opts.elicitation ?? { form: {} } } : {} });
   if (opts.elicit) {
     const elicit = opts.elicit;
-    client.setRequestHandler(ElicitRequestSchema, async (req) => {
+    client.setRequestHandler('elicitation/create', async (req) => {
       const message = (req.params as { message: string }).message;
       opts.asked?.push(message);
       const r = elicit(message);

@@ -22,14 +22,18 @@
     "model-context-protocol"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/server": "^2.4.0",
     "fast-xml-parser": "^5.2.0",
     "js-sha3": "^0.9.3",
     "js-sha512": "^0.9.0",
-    "zod": "^3.24.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
     "@types/node": "^22.0.0",
     "esbuild": "^0.27.3",
     "tsx": "^4.19.0",
