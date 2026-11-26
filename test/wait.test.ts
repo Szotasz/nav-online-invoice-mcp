@@ -304,6 +304,53 @@ test("the client gives up while the confirmation is still open: nothing is sent,
   });
 });
 
+// --- two identical calls at the same time (parallel tool calls) ---
+
+const slowAccept: Elicit = () => new Promise((r) => setTimeout(() => r({ action: "accept", content: { confirm: true } }), 30)) as never;
+
+for (const [first, second] of [["submit_and_wait", "submit_and_wait"], ["manage_invoice", "submit_and_wait"], ["manage_invoice", "manage_invoice"]] as const) {
+  test(`parallel identical ${first} and ${second}: one confirmation, one submission`, async () => {
+    await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+      const s = await session(calls, { elicit: slowAccept });
+      const [a, b] = await Promise.all([
+        s.callTool(first, ARGS(), new AbortController().signal),
+        s.callTool(second, ARGS(), new AbortController().signal),
+      ]);
+      const texts = [textOf(a), textOf(b)];
+      assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 1, "one submission");
+      assert.equal(s.asked.length, 1, "one confirmation");
+      assert.equal(texts.filter((t) => /egy másik hívás épp most küldi/.test(t)).length, 1, texts.join("\n---\n"));
+      await s.close();
+    });
+  });
+}
+
+test("parallel calls with different data both go", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    const s = await session(calls, { elicit: slowAccept });
+    await Promise.all([
+      s.callTool("manage_invoice", ARGS(), new AbortController().signal),
+      s.callTool("manage_invoice", { operations: [{ index: 1, operation: "CREATE", invoiceData: b64(invoiceXml({ number: "TESZT-MASIK" })) }] }, new AbortController().signal),
+    ]);
+    assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 2);
+    await s.close();
+  });
+});
+
+test("the pending mark goes when a call ends without sending: a decline, then the same call asks again", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    let n = 0;
+    const s = await session(calls, { elicit: () => (n++ === 0 ? { action: "decline" } : { action: "accept", content: { confirm: true } }) });
+    const declined = await s.call(ARGS());
+    assert.match(declined.text, /nothing sent/);
+    const again = await s.call(ARGS());
+    assert.match(again.text, /^## Processed by NAV/);
+    assert.equal(s.asked.length, 2);
+    assert.equal(s.sent().filter((e) => e === "manageInvoice").length, 1);
+    await s.close();
+  });
+});
+
 test("a batch waits until every invoice is final", async () => {
   const two = { operations: [1, 2].map((index) => ({ index, operation: "CREATE", invoiceData: b64(invoiceXml({ number: `TESZT-000${index}` })) })) };
   await withMockNav(replies([
