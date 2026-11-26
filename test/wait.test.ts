@@ -184,6 +184,17 @@ test("budget used up during the submission itself: sent, no status query, the tr
   });
 });
 
+test("submitAndWait itself sends nothing when the call is already cancelled (a second line behind withConfirmation)", async () => {
+  await withMockNav(replies([status({ index: 1, status: "DONE" })]), async (calls) => {
+    const controller = new AbortController();
+    controller.abort();
+    const ctx = { mcpReq: { signal: controller.signal, _meta: {}, notify: async () => {} } } as unknown as Parameters<typeof submitAndWait>[2];
+    const r = await submitAndWait(getConfig(FAKE), { operations: ARGS().operations, compressed: false }, ctx, formatResponse, fakeClock());
+    assert.match(textOf(r), /^Nem küldtem semmit a NAV-nak \(nothing sent\)/);
+    assert.deepEqual(calls, []);
+  });
+});
+
 // The client gives up the call while the user decides: it sends notifications/cancelled, then the user's accept
 // arrives. Nothing may be sent, by any of the three write tools.
 for (const [tool, args] of [
