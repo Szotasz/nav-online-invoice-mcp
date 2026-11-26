@@ -169,8 +169,9 @@ export async function submitAndWait(
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   const client = new NavClient(config);
   const { result, data, rawXml, transactionId } = await client.manageInvoice(args.operations, args.compressed);
-  if (result.funcCode !== "OK" || !transactionId) {
-    // Not taken in: the same answer as manage_invoice, and nothing to wait for.
+  if (!transactionId) {
+    // Not taken in: the same answer as manage_invoice, and nothing to wait for. A transaction ID means NAV took the
+    // data in, whatever else the answer says, so then the wait runs and the result per invoice decides.
     return { content: [{ type: "text", text: formatSubmission(result, data, rawXml) }], isError: true };
   }
   const maxWaitMs = Math.min(MAX_WAIT_MS, (args.maxWaitSeconds ?? Infinity) * 1000);

@@ -114,6 +114,7 @@ for (const open of ["RECEIVED", "PROCESSING", "SAVED"]) {
       const r = await s.call(ARGS());
       assert.equal(r.isError, false);
       assert.match(r.text, /^## Sent, processing not finished yet/);
+      assert.ok(r.text.includes(`**Transaction ID**: \`${TX}\``), r.text);
       assert.ok(r.text.includes(`- #1: ${open} (not finished)`), r.text);
       assert.ok(r.text.includes(`query_transaction_status (transactionId \`${TX}\`)`), r.text);
       assert.equal(clock.elapsed(), MAX_WAIT_MS, "the wait stops exactly at the limit");
@@ -236,13 +237,15 @@ test("a failed status query ends the wait, and says the data was sent", async ()
     const s = await session(calls, { elicit: accept });
     const r = await s.call(ARGS());
     assert.match(r.text, /^## Sent, but the status query failed/);
+    assert.ok(r.text.includes(`**Transaction ID**: \`${TX}\``), r.text);
     assert.match(r.text, /The data was sent to NAV\. Asking for its status failed: TESZT_HIBA: Teszt/);
     assert.ok(r.text.includes(`query_transaction_status (transactionId \`${TX}\`)`), r.text);
     await s.close();
   });
 });
 
-test("stopping the wait (abort): the answer says the data was already sent, with the transaction ID", async () => {
+// A time limit, so a wait that ignores the stop fails this test instead of hanging the run.
+test("stopping the wait (abort): the answer says the data was already sent, with the transaction ID", { timeout: 10_000 }, async () => {
   await withMockNav(replies([status({ index: 1, status: "PROCESSING" })]), async (calls) => {
     const controller = new AbortController();
     const clock = fakeClock();
@@ -261,6 +264,7 @@ test("stopping the wait (abort): the answer says the data was already sent, with
     const r = await submitAndWait(getConfig(FAKE), { operations: ARGS().operations, compressed: false }, ctx, formatResponse, stopping);
     const text = textOf(r);
     assert.match(text, /^## Waiting stopped/);
+    assert.ok(text.includes(`**Transaction ID**: \`${TX}\``), text);
     assert.match(text, /The data was already sent to NAV\. Stopping the wait does not recall it\./);
     assert.ok(text.includes(`query_transaction_status (transactionId \`${TX}\`)`), text);
     assert.equal(calls.filter((c) => c.endpoint === "queryTransactionStatus").length, 2, "no query after the stop");
