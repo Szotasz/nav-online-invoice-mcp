@@ -271,6 +271,13 @@ test("without elicitation: the id is bound to the arguments and to the tool", as
   });
 });
 
+test("the confirmation store: an id is bound to its tool, even with the same arguments", () => {
+  const store = new ConfirmationStore();
+  const args = { operations: [{ index: 1 }] };
+  assert.equal(store.consume(store.issue("manage_invoice", args), "manage_annulment", args), "mismatch");
+  assert.equal(store.consume(store.issue("manage_invoice", args), "manage_invoice", { ...args, confirmation_id: "x" }), "ok");
+});
+
 test("without elicitation: the id expires after five minutes", async () => {
   await withMockNav(REPLIES, async (calls) => {
     let t = 1_000_000;
