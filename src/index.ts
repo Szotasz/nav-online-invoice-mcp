@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getConfig } from "./config.js";
 import { registerTools } from "./tools.js";
+import { registerSkills } from "./skills.js";
 
 // Smithery config schema — exported so Smithery auto-generates the config UI
 export const configSchema = z.object({
@@ -29,6 +30,7 @@ export default function createServer({ config }: { config: Partial<SmitheryConfi
   });
 
   registerTools(server, () => getConfig(config));
+  registerSkills(server);
 
   // Smithery expects server.server (the low-level Server instance)
   return server.server;

@@ -103,6 +103,11 @@ export async function connectClient(
   return client;
 }
 
+/** The NAV guides in skills/ (src/skills.ts), by name: the skill-<name> prompt names are pinned by this list. */
+export const SKILL_NAMES = [
+  "choose-correction-path", "look-up-taxpayer", "read-submission-status", "search-invoices-by-period", "test-and-production",
+];
+
 export const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
 
 const DATA_NS = 'xmlns="http://schemas.nav.gov.hu/OSA/3.0/data" xmlns:base="http://schemas.nav.gov.hu/OSA/3.0/base"';
