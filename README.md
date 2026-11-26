@@ -45,6 +45,8 @@ NAV Online Számla technikai felhasználó szükséges. Regisztráció:
 - **Teszt**: https://onlineszamla-test.nav.gov.hu/
 - **Éles**: https://onlineszamla.nav.gov.hu/
 
+Helyi futtatáshoz Node.js 20 vagy újabb kell (az MCP SDK v2 igénye).
+
 ## Helyi telepítés
 
 Ha inkább lokálisan szeretnéd futtatni a szervert:
@@ -177,6 +179,8 @@ The two write tools send nothing to NAV until the user approves it:
 You need a NAV Online Invoice technical user. Register at:
 - **Test**: https://onlineszamla-test.nav.gov.hu/
 - **Production**: https://onlineszamla.nav.gov.hu/
+
+Running it locally needs Node.js 20 or later (required by the MCP SDK v2).
 
 ## Local Installation
 

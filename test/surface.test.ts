@@ -4,12 +4,19 @@
 // tools with shorter descriptions; nothing else differed.)
 // The one change since: the two write tools take an optional confirmation_id (the confirmation step, src/confirm.ts).
 // withConfirmationId() adds exactly that to the main surface, so any other drift still fails.
+// The move to SDK v2 (2.4.0, zod 4) changed how the same tools are written out; asServedByV2() applies exactly those
+// changes to the main fixture, and the comparison is deep equality, so the key order inside a schema does not count:
+//   - inputSchema.$schema is JSON Schema 2020-12 instead of draft-07;
+//   - `additionalProperties: false` is no longer emitted. It was never enforced: on v1 and on v2 alike, an unknown
+//     argument is accepted and dropped before the handler runs (measured on both);
+//   - `execution: { taskSupport: "forbidden" }` is no longer emitted; a tool without `execution` does not support
+//     tasks either, so nothing changes for a client.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { Client } from "@modelcontextprotocol/client";
 import { connectClient } from "./helpers.js";
 
 const ROOT = join(__dirname, "..");
@@ -31,7 +38,24 @@ function withConfirmationId(surface: { tools: Array<{ name: string; inputSchema:
   }
   return copy;
 }
-const EXPECTED = withConfirmationId(FIXTURE);
+/** The surface as SDK v2 writes it out: see the header for the three differences. */
+function asServedByV2<T>(surface: T): T {
+  const copy = JSON.parse(JSON.stringify(surface));
+  const dropAdditional = (o: unknown): void => {
+    if (Array.isArray(o)) o.forEach(dropAdditional);
+    else if (o && typeof o === "object") {
+      delete (o as Record<string, unknown>).additionalProperties;
+      Object.values(o).forEach(dropAdditional);
+    }
+  };
+  for (const tool of copy.tools) {
+    tool.inputSchema.$schema = "https://json-schema.org/draft/2020-12/schema";
+    dropAdditional(tool.inputSchema);
+    delete tool.execution;
+  }
+  return copy;
+}
+const EXPECTED = asServedByV2(withConfirmationId(FIXTURE));
 
 /** The surface with every `description` removed, at any depth. */
 function withoutDescriptions(o: unknown): unknown {
@@ -42,14 +66,17 @@ function withoutDescriptions(o: unknown): unknown {
   return o;
 }
 
+// As JSON, the way a client receives it over a real transport: the in-memory transport of v2 passes the objects
+// through, keys with an undefined value included (prompt _meta, icons, title), which JSON leaves out.
 async function surfaceOf(client: Client) {
-  return { tools: (await client.listTools()).tools, prompts: (await client.listPrompts()).prompts, server: client.getServerVersion() };
+  const surface = { tools: (await client.listTools()).tools, prompts: (await client.listPrompts()).prompts, server: client.getServerVersion() };
+  return JSON.parse(JSON.stringify(surface));
 }
 
-test("the Smithery entry point serves the main surface byte for byte, plus the confirmation_id", { timeout: 30_000 }, async () => {
+test("the Smithery entry point serves the main surface, plus the confirmation_id, as SDK v2 writes it", { timeout: 30_000 }, async () => {
   const client = await connectClient();
   try {
-    assert.equal(JSON.stringify(await surfaceOf(client), null, 2), JSON.stringify(EXPECTED, null, 2));
+    assert.deepEqual(await surfaceOf(client), EXPECTED);
   } finally {
     await client.close();
   }
@@ -66,9 +93,9 @@ test("the CLI entry point (stdio) serves the same surface", { timeout: 30_000 },
   }));
   try {
     const surface = await surfaceOf(client);
-    assert.equal(JSON.stringify(surface, null, 2), JSON.stringify(EXPECTED, null, 2));
-    // the only changes against the CLI on main: descriptions (tool and parameter texts) and the confirmation_id
-    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(withConfirmationId(CLI_MAIN)));
+    assert.deepEqual(surface, EXPECTED);
+    // the only changes against the CLI on main: descriptions (tool and parameter texts), the confirmation_id and v2
+    assert.deepEqual(withoutDescriptions(surface), withoutDescriptions(asServedByV2(withConfirmationId(CLI_MAIN))));
     assert.notDeepEqual(surface, CLI_MAIN);
   } finally {
     await client.close();

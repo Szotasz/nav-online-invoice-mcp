@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gzipSync } from "node:zlib";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { getConfig } from "../src/config.js";
 import { registerTools } from "../src/tools.js";
 import { ConfirmationStore, CONFIRMATION_TTL_MS } from "../src/confirm.js";
@@ -265,6 +265,36 @@ test("manage_invoice: compressed data that unpacks beyond the limit is refused",
     assert.deepEqual(s.asked, []);
     assert.deepEqual(s.sent(), []);
     await s.close();
+  });
+});
+
+// --- which clients get the form: measured on SDK v2 ---
+
+test("a client that declares an empty elicitation capability gets the form (v2 reads {} as form mode)", async () => {
+  await withMockNav(REPLIES, async (calls) => {
+    const asked: string[] = [];
+    const server = new McpServer({ name: "nav-test", version: "0" });
+    registerTools(server, () => getConfig(FAKE));
+    const client = await connectClient(undefined, { elicit: () => ({ action: "decline" }), asked, server, elicitation: {} });
+    const r = textOf(await client.callTool({ name: "manage_invoice", arguments: invoiceArgs() }));
+    assert.equal(asked.length, 1);
+    assert.match(r, /nothing sent.*elutasította/);
+    assert.deepEqual(calls, []);
+    await client.close();
+  });
+});
+
+test("a client with URL elicitation only is not sent a form: it gets the two-step path", async () => {
+  await withMockNav(REPLIES, async (calls) => {
+    const asked: string[] = [];
+    const server = new McpServer({ name: "nav-test", version: "0" });
+    registerTools(server, () => getConfig(FAKE));
+    const client = await connectClient(undefined, { elicit: () => new Error("must not be asked"), asked, server, elicitation: { url: {} } });
+    const r = textOf(await client.callTool({ name: "manage_invoice", arguments: invoiceArgs() }));
+    assert.equal(asked.length, 0);
+    assert.match(r, /confirmation_id: "/);
+    assert.deepEqual(calls, []);
+    await client.close();
   });
 });
 

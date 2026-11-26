@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 
 // A confirmation step in front of the two tools that send data to NAV (manage_invoice, manage_annulment). The same
 // pattern as billingo-mcp:
