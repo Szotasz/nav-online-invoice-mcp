@@ -4,6 +4,9 @@ import { NOTHING_SENT, argsKey } from "./confirm.js";
 // cancel, or a request timeout shorter than the wait) never shows the model the answer with the transaction ID, so
 // the model may send the same data again. While an entry lives, an identical manage_invoice or submit_and_wait sends
 // nothing and returns the transaction ID instead, before any confirmation is asked.
+//
+// The record lives in memory only: after a server restart it is empty, and the same data can be sent again (with the
+// confirmation, as always). Only a submission NAV took in (one with a transaction ID) is recorded.
 
 export const RESEND_GUARD_MS = 30 * 60 * 1000;
 
